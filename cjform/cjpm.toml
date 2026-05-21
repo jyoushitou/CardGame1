@@ -1,0 +1,15 @@
+[package]
+  cjc-version = "1.0.5"
+  name = "cjform"
+  description = "Cangjie Windows UI Library"
+  version = "1.0.1"
+  target-dir = ""
+  output-type = "static"
+  compile-option = "-Woff unused"
+  override-compile-option = ""
+  link-option = ""
+  package-configuration = {}
+  homepage = "https://github.com/Sunse666/cjform"
+  license = "GPL-3.0"
+
+[dependencies]

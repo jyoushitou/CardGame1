@@ -1,0 +1,16 @@
+[package]
+  cjc-version = "1.0.5"
+  name = "myapp"
+  description = "CJForm application"
+  version = "0.1.0"
+  target-dir = ""
+  output-type = "executable"
+  compile-option = "-Woff unused"
+  override-compile-option = ""
+  link-option = "-L. -lbridge --subsystem console"
+  package-configuration = {}
+  homepage = "https://github.com/Sunse666/cjform"
+  license = "GPL-3.0"
+
+[dependencies]
+cjform = { path = "./cjform" }
