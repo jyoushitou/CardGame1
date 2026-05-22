@@ -76,8 +76,16 @@ public class Label <: Widget {
                 let actualY = position.resolveY(initialHeight, currentHeight)
                 let actualFontSize = sizeScale.resolve(initialWidth, currentWidth, baseFontSize)
                 let textWidth = canvas.measureTextWidth(text, fontFamily, actualFontSize)
-                let drawX = actualX - textWidth / 2.0
-                let drawY = actualY - actualFontSize / 2.0
+                let drawX = match (anchor) {
+                    case Anchor.TopLeft | Anchor.CenterLeft | Anchor.BottomLeft => actualX
+                    case Anchor.TopRight | Anchor.CenterRight | Anchor.BottomRight => actualX - textWidth
+                    case _ => actualX - textWidth / 2.0
+                }
+                let drawY = match (anchor) {
+                    case Anchor.TopLeft | Anchor.TopCenter | Anchor.TopRight => actualY
+                    case Anchor.BottomLeft | Anchor.BottomCenter | Anchor.BottomRight => actualY - actualFontSize
+                    case _ => actualY - actualFontSize / 2.0
+                }
                 canvas.drawText(drawX, drawY, text, fontFamily, actualFontSize, actualColor)
         }
     }

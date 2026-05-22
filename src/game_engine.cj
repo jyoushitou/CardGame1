@@ -3,7 +3,6 @@ package myapp
 import std.collection.*
 import cjform.*
 
-// ===== Simple RNG =====
 public class Rng {
     private var counter: Int64
 
@@ -23,13 +22,11 @@ public class Rng {
         }
     }
 
-    // Returns 0.0 .. 1.0 as Float32
     public func nextFloat(): Float32 {
         Float32(nextInt(1000)) / Float32(1000)
     }
 }
 
-// ===== Character Data =====
 public struct CharData {
     public let id: Int32
     public let name: String
@@ -37,15 +34,18 @@ public struct CharData {
     public let maxHP: Int32
     public let activeSkillCost: Int32
     public let passiveSkillThreshold: Int32
-    public let attackMul: Float32
-    public let damageMul: Float32
+    public let physicalAttackMul: Float32
+    public let magicalAttackMul: Float32
+    public let physicalDefense: Float32
+    public let magicalDefense: Float32
     public let dicenum: Int32
     public let ATKnum: Int32
     public let DMGnum: Int32
 
     public init(id: Int32, name: String, desc: String, maxHP: Int32,
                 activeSkillCost: Int32, passiveSkillThreshold: Int32,
-                attackMul: Float32, damageMul: Float32,
+                physicalAttackMul: Float32, magicalAttackMul: Float32,
+                physicalDefense: Float32, magicalDefense: Float32,
                 dicenum: Int32, ATKnum: Int32, DMGnum: Int32) {
         this.id = id
         this.name = name
@@ -53,38 +53,45 @@ public struct CharData {
         this.maxHP = maxHP
         this.activeSkillCost = activeSkillCost
         this.passiveSkillThreshold = passiveSkillThreshold
-        this.attackMul = attackMul
-        this.damageMul = damageMul
+        this.physicalAttackMul = physicalAttackMul
+        this.magicalAttackMul = magicalAttackMul
+        this.physicalDefense = physicalDefense
+        this.magicalDefense = magicalDefense
         this.dicenum = dicenum
         this.ATKnum = ATKnum
         this.DMGnum = DMGnum
     }
 }
 
-// All available classes
 public func getAllClasses(): ArrayList<CharData> {
     let list = ArrayList<CharData>()
-    list.add(CharData(1, "剑士", "均衡型 — 攻守兼备",
-        50, 100, 4, 0.60, 1.00, 5, 4, 3))
-    list.add(CharData(2, "盾卫", "防御型 — 高血量高护甲",
-        80, 130, 3, 0.40, 1.30, 4, 3, 3))
-    list.add(CharData(3, "暗影", "刺客型 — 低血高攻高暴击",
-        35, 75, 6, 0.85, 0.70, 5, 4, 2))
-    list.add(CharData(4, "术士", "技能型 — 技能频繁触发",
-        40, 60, 3, 0.55, 0.80, 6, 5, 2))
-    list.add(CharData(5, "狂战", "狂战型 — 极限输出",
-        45, 85, 7, 0.75, 0.85, 5, 5, 2))
+    list.add(CharData(1, "剑士", "均衡物理型 — 物法兼备",
+        80, 100, 4, 0.60, 0.20, 0.15, 0.10, 5, 4, 3))
+    list.add(CharData(2, "盾卫", "坦克型 — 高血量高双防",
+        130, 130, 3, 0.35, 0.10, 0.30, 0.25, 4, 3, 3))
+    list.add(CharData(3, "暗影", "刺客型 — 极限物攻低防",
+        55, 75, 6, 0.85, 0.15, 0.05, 0.05, 5, 4, 2))
+    list.add(CharData(4, "术士", "技能型 — 法术为主",
+        65, 60, 3, 0.15, 0.80, 0.10, 0.15, 6, 5, 2))
+    list.add(CharData(5, "狂战", "狂战型 — 极限物攻输出",
+        70, 85, 7, 0.75, 0.30, 0.05, 0.05, 5, 5, 2))
+    list.add(CharData(6, "圣骑", "均衡双修型 — 双攻双防",
+        100, 110, 5, 0.45, 0.40, 0.20, 0.20, 4, 3, 3))
+    list.add(CharData(7, "元素使", "纯法型 — 极限法攻",
+        55, 55, 4, 0.10, 0.90, 0.05, 0.20, 6, 5, 2))
+    list.add(CharData(8, "死灵", "法坦型 — 法攻为主偏防御",
+        60, 65, 5, 0.20, 0.70, 0.10, 0.15, 5, 4, 3))
     list
 }
 
-// ===== Character State =====
 public class Character {
     public let data: CharData
     public var hp: Int32
     public var skillPoints: Int32
     public var shields: Int32
     public var diceResults: ArrayList<Int32>
-    public var selectedDice: ArrayList<Bool>
+    public var physDice: ArrayList<Bool>
+    public var magDice: ArrayList<Bool>
 
     public init(data: CharData) {
         this.data = data
@@ -92,10 +99,13 @@ public class Character {
         this.skillPoints = 0
         this.shields = 3
         this.diceResults = ArrayList<Int32>()
-        this.selectedDice = ArrayList<Bool>()
-        for (_ in 0..data.dicenum) {
+        this.physDice = ArrayList<Bool>()
+        this.magDice = ArrayList<Bool>()
+        let totalDice = data.dicenum
+        for (_ in 0..totalDice) {
             diceResults.add(0)
-            selectedDice.add(false)
+            physDice.add(false)
+            magDice.add(false)
         }
     }
 
@@ -109,74 +119,133 @@ public class Character {
         result
     }
 
-    public func isDiceSelected(index: Int32): Bool {
+    public func isPhysDice(index: Int32): Bool {
         var result: Bool = false
         var pos: Int32 = 0
-        for (s in selectedDice) {
+        for (s in physDice) {
             if (pos == index) { result = s }
             pos = pos + 1
         }
         result
     }
 
-    public func rollDice(rng: Rng): Unit {
-        let newDice = ArrayList<Int32>()
-        let newSel = ArrayList<Bool>()
-        for (_ in 0..data.dicenum) {
-            newDice.add(rng.nextInt(9))
-            newSel.add(false)
-        }
-        diceResults = newDice
-        selectedDice = newSel
-    }
-
-    public func clearSelection(): Unit {
-        let newSel = ArrayList<Bool>()
-        for (_ in 0..data.dicenum) { newSel.add(false) }
-        selectedDice = newSel
-    }
-
-    public func toggleDice(index: Int32): Unit {
-        let current = isDiceSelected(index)
-        let newSel = ArrayList<Bool>()
+    public func isMagDice(index: Int32): Bool {
+        var result: Bool = false
         var pos: Int32 = 0
-        for (_ in 0..data.dicenum) {
+        for (s in magDice) {
+            if (pos == index) { result = s }
+            pos = pos + 1
+        }
+        result
+    }
+
+    public func cycleDiceMode(index: Int32): Unit {
+        let isPhys = isPhysDice(index)
+        let isMag = isMagDice(index)
+        let newPhys = ArrayList<Bool>()
+        let newMag = ArrayList<Bool>()
+        var pos: Int32 = 0
+        let totalDice = data.dicenum
+        for (_ in 0..totalDice) {
             if (pos == index) {
-                newSel.add(!current)
+                if (!isPhys && !isMag) {
+                    newPhys.add(true)
+                    newMag.add(false)
+                } else if (isPhys) {
+                    newPhys.add(false)
+                    newMag.add(true)
+                } else {
+                    newPhys.add(false)
+                    newMag.add(false)
+                }
             } else {
-                newSel.add(isDiceSelected(pos))
+                newPhys.add(isPhysDice(pos))
+                newMag.add(isMagDice(pos))
             }
             pos = pos + 1
         }
-        selectedDice = newSel
+        physDice = newPhys
+        magDice = newMag
     }
 
-    public func getSelectedSum(): Int32 {
+    public func rollDice(rng: Rng): Unit {
+        let totalDice = data.dicenum
+        let newDice = ArrayList<Int32>()
+        let newPhys = ArrayList<Bool>()
+        let newMag = ArrayList<Bool>()
+        for (_ in 0..totalDice) {
+            newDice.add(rng.nextInt(9))
+            newPhys.add(false)
+            newMag.add(false)
+        }
+        diceResults = newDice
+        physDice = newPhys
+        magDice = newMag
+    }
+
+    public func clearSelection(): Unit {
+        let totalDice = data.dicenum
+        let newPhys = ArrayList<Bool>()
+        let newMag = ArrayList<Bool>()
+        for (_ in 0..totalDice) {
+            newPhys.add(false)
+            newMag.add(false)
+        }
+        physDice = newPhys
+        magDice = newMag
+    }
+
+    public func getPhysSum(): Int32 {
         var sum: Int32 = 0
         var pos: Int32 = 0
-        for (_ in selectedDice) {
-            if (isDiceSelected(pos)) { sum = sum + getDice(pos) }
+        for (_ in physDice) {
+            if (isPhysDice(pos)) { sum = sum + getDice(pos) }
             pos = pos + 1
         }
         sum
     }
 
-    public func getSelectedCount(): Int32 {
+    public func getMagSum(): Int32 {
+        var sum: Int32 = 0
+        var pos: Int32 = 0
+        for (_ in magDice) {
+            if (isMagDice(pos)) { sum = sum + getDice(pos) }
+            pos = pos + 1
+        }
+        sum
+    }
+
+    public func getPhysCount(): Int32 {
         var count: Int32 = 0
         var pos: Int32 = 0
-        for (_ in selectedDice) {
-            if (isDiceSelected(pos)) { count = count + 1 }
+        for (_ in physDice) {
+            if (isPhysDice(pos)) { count = count + 1 }
             pos = pos + 1
         }
         count
     }
 
-    public func aiSelectBest(count: Int32): Unit {
+    public func getMagCount(): Int32 {
+        var count: Int32 = 0
+        var pos: Int32 = 0
+        for (_ in magDice) {
+            if (isMagDice(pos)) { count = count + 1 }
+            pos = pos + 1
+        }
+        count
+    }
+
+    public func getTotalCount(): Int32 {
+        getPhysCount() + getMagCount()
+    }
+
+    public func aiSelect(totalCount: Int32, physRatio: Float32): Unit {
+        let totalDice = data.dicenum
         let topIndices = ArrayList<Int32>()
         var used = ArrayList<Bool>()
-        for (_ in 0..data.dicenum) { used.add(false) }
+        for (_ in 0..totalDice) { used.add(false) }
 
-        for (_ in 0..count) {
+        for (_ in 0..totalCount) {
             var bestIdx: Int32 = -1
             var bestVal: Int32 = -1
             var pi: Int32 = 0
@@ -203,28 +272,38 @@ public class Character {
             }
         }
 
-        let newSel = ArrayList<Bool>()
+        var physCount = Int32(Float32(totalCount) * physRatio)
+        if (physCount < 0) { physCount = 0 }
+        if (physCount > totalCount) { physCount = totalCount }
+
+        let newPhys = ArrayList<Bool>()
+        let newMag = ArrayList<Bool>()
         var pi2: Int32 = 0
-        for (_ in 0..data.dicenum) {
-            var found: Bool = false
+        for (_ in 0..totalDice) {
+            var assignedPhys: Bool = false
+            var assignedMag: Bool = false
+            var rank: Int32 = 0
             for (ti in topIndices) {
-                if (ti == pi2) { found = true }
+                if (ti == pi2) {
+                    if (rank < physCount) { assignedPhys = true }
+                    else { assignedMag = true }
+                }
+                rank = rank + 1
             }
-            newSel.add(found)
+            newPhys.add(assignedPhys)
+            newMag.add(assignedMag)
             pi2 = pi2 + 1
         }
-        selectedDice = newSel
+        physDice = newPhys
+        magDice = newMag
     }
 
-    // Shield check: returns true if shield absorbed the attack
-    // Trigger when rawAttack >= 30% maxHP, probability increases as HP decreases
     public func checkShield(rawAttack: Int32, rng: Rng): Bool {
         if (shields <= 0) { return false }
-        let threshold: Int32 = data.maxHP * 3 / 10  // 30% of max HP
+        let threshold: Int32 = data.maxHP * 3 / 10
         if (rawAttack < threshold) { return false }
 
         let hpRatio = Float32(hp) / Float32(data.maxHP)
-        // Probability: 0% at full HP, up to 85% at 0 HP
         let prob = (Float32(1) - hpRatio) * Float32(0.85)
         let roll = rng.nextFloat()
 
@@ -252,7 +331,6 @@ public class Character {
     }
 }
 
-// ===== Game State =====
 public enum GamePhase {
     | SELECT_CHARACTER
     | PLAYER_ROLL
@@ -269,8 +347,8 @@ public class CardGameEngine {
     public var phase: GamePhase
     public var rng: Rng
     public var messages: ArrayList<String>
-    public var lastPlayerDamage: Int32
-    public var lastAIDamage: Int32
+    public var lastAIPhysAtk: Int32
+    public var lastAIMagAtk: Int32
 
     public init() {
         player = Character(getAllClasses()[0])
@@ -278,14 +356,13 @@ public class CardGameEngine {
         phase = GamePhase.SELECT_CHARACTER
         rng = Rng()
         messages = ArrayList<String>()
-        lastPlayerDamage = 0
-        lastAIDamage = 0
+        lastAIPhysAtk = 0
+        lastAIMagAtk = 0
     }
 
     public func selectPlayerClass(charData: CharData): Unit {
         player = Character(charData)
         log("你选择了: ${charData.name} — ${charData.desc}")
-        // AI randomly picks
         let allClasses = getAllClasses()
         let aiIdx = rng.nextInt(Int32(allClasses.size))
         let idx = aiIdx - 1
@@ -326,110 +403,114 @@ public class CardGameEngine {
         phase = GamePhase.PLAYER_ATTACK
     }
 
-    // Calculate raw attack value BEFORE defense (for shield check)
-    private func calcRawAttack(ch: Character): Int32 {
-        let sum = ch.getSelectedSum()
-        var atk = Int32(Float32(sum) * ch.data.attackMul)
-        if (ch.canUseSkill()) { atk = atk * 2 }
-        if (ch.checkPassiveSkill(rng)) { atk = atk * 4 }
-        atk
-    }
-
     public func playerAttack(): Int32 {
-        let sum = player.getSelectedSum()
-        var atk = Int32(Float32(sum) * player.data.attackMul)
-        log("玩家攻击基础值: ${atk}")
+        let physSum = player.getPhysSum()
+        let magSum = player.getMagSum()
+        var physAtk = Int32(Float32(physSum) * player.data.physicalAttackMul)
+        var magAtk = Int32(Float32(magSum) * player.data.magicalAttackMul)
+        log("玩家物攻: ${physAtk} (骰${physSum}x${player.data.physicalAttackMul}), 法攻: ${magAtk} (骰${magSum}x${player.data.magicalAttackMul})")
 
         if (player.canUseSkill()) {
             player.useSkill()
-            atk = atk * 2
-            log("主动技能发动! 攻击翻倍 -> ${atk}")
+            physAtk = physAtk * 2
+            magAtk = magAtk * 2
+            log("主动技能发动! 攻击翻倍 -> 物攻:${physAtk} 法攻:${magAtk}")
         }
 
-        var passiveTriggered: Bool = false
         if (player.checkPassiveSkill(rng)) {
-            atk = atk * 4
-            passiveTriggered = true
-            log("被动技能暴击! 最终伤害 -> ${atk}")
+            physAtk = physAtk * 4
+            magAtk = magAtk * 4
+            log("被动技能暴击! 最终伤害 -> 物攻:${physAtk} 法攻:${magAtk}")
         }
 
-        // Check AI shield (before defense)
-        if (ai.checkShield(atk, rng)) {
+        let totalRaw = physAtk + magAtk
+        if (ai.checkShield(totalRaw, rng)) {
             log("AI护盾触发! 伤害被完全抵消 (剩余护盾: ${ai.shields})")
-            player.addSkillPoints(atk * 2)
-            ai.addSkillPoints(atk)
-            lastPlayerDamage = 0
+            player.addSkillPoints(totalRaw * 2)
+            ai.addSkillPoints(totalRaw)
             phase = GamePhase.AI_TURN
             return 0
         }
 
-        // AI defends
         ai.rollDice(rng)
-        ai.aiSelectBest(ai.data.DMGnum)
-        let defense = ai.getSelectedSum()
-        log("AI防御点数: ${defense} (选了${ai.data.DMGnum}个骰子)")
+        let aiDefPhysRatio = (Float32(1) - ai.data.physicalDefense) / ((Float32(1) - ai.data.physicalDefense) + (Float32(1) - ai.data.magicalDefense))
+        ai.aiSelect(ai.data.DMGnum, aiDefPhysRatio)
+        let physDef = ai.getPhysSum()
+        let magDef = ai.getMagSum()
+        log("AI物防骰: ${physDef}(${ai.getPhysCount()}个), 法防骰: ${magDef}(${ai.getMagCount()}个)")
 
-        let actualDamage = max2(0, Int32(Float32(atk) * ai.data.damageMul) - defense)
-        ai.hp = max2(0, ai.hp - actualDamage)
-        log("AI受到 ${actualDamage} 点伤害, 剩余HP: ${ai.hp}/${ai.data.maxHP}")
+        let physDmg = Int32(Float32(max2(0, physAtk - physDef)) * (Float32(1) - ai.data.physicalDefense))
+        let magDmg = Int32(Float32(max2(0, magAtk - magDef)) * (Float32(1) - ai.data.magicalDefense))
+        let totalDmg = physDmg + magDmg
+        ai.hp = max2(0, ai.hp - totalDmg)
+        log("AI受到 物伤:${physDmg} + 法伤:${magDmg} = ${totalDmg} 伤害, 剩余HP: ${ai.hp}/${ai.data.maxHP}")
 
-        player.addSkillPoints(atk * 2)
-        ai.addSkillPoints(atk)
+        player.addSkillPoints(totalRaw * 2)
+        ai.addSkillPoints(totalRaw)
 
-        lastPlayerDamage = actualDamage
         phase = GamePhase.AI_TURN
-        actualDamage
+        totalDmg
     }
 
     public func aiAttack(): Int32 {
         ai.rollDice(rng)
-        ai.aiSelectBest(ai.data.ATKnum)
-        let sum = ai.getSelectedSum()
-        var atk = Int32(Float32(sum) * ai.data.attackMul)
-        log("AI攻击基础值: ${atk} (选了${ai.data.ATKnum}个骰子)")
+        let aiAtkPhysRatio = ai.data.physicalAttackMul / (ai.data.physicalAttackMul + ai.data.magicalAttackMul)
+        ai.aiSelect(ai.data.ATKnum, aiAtkPhysRatio)
+        let physSum = ai.getPhysSum()
+        let magSum = ai.getMagSum()
+        var physAtk = Int32(Float32(physSum) * ai.data.physicalAttackMul)
+        var magAtk = Int32(Float32(magSum) * ai.data.magicalAttackMul)
+        log("AI物攻: ${physAtk} (骰${physSum}x${ai.data.physicalAttackMul}), 法攻: ${magAtk} (骰${magSum}x${ai.data.magicalAttackMul})")
 
         if (ai.canUseSkill()) {
             ai.useSkill()
-            atk = atk * 2
-            log("AI主动技能发动! 攻击翻倍 -> ${atk}")
+            physAtk = physAtk * 2
+            magAtk = magAtk * 2
+            log("AI主动技能发动! 攻击翻倍")
         }
 
         if (ai.checkPassiveSkill(rng)) {
-            atk = atk * 4
-            log("AI被动技能暴击! 最终伤害 -> ${atk}")
+            physAtk = physAtk * 4
+            magAtk = magAtk * 4
+            log("AI被动技能暴击!")
         }
 
-        // Check player shield (before defense)
-        if (player.checkShield(atk, rng)) {
+        let totalRaw = physAtk + magAtk
+        if (player.checkShield(totalRaw, rng)) {
             log("你的护盾触发! 伤害被完全抵消 (剩余护盾: ${player.shields})")
-            player.addSkillPoints(atk)
-            ai.addSkillPoints(atk * 2)
-            lastAIDamage = 0
+            player.addSkillPoints(totalRaw)
+            ai.addSkillPoints(totalRaw * 2)
+            lastAIPhysAtk = 0
+            lastAIMagAtk = 0
             phase = GamePhase.ROUND_RESULT
             return 0
         }
 
         player.rollDice(rng)
-        log("AI发动攻击! 请选择 ${player.data.DMGnum} 个防御骰子")
+        lastAIPhysAtk = physAtk
+        lastAIMagAtk = magAtk
+        log("AI发动攻击! 物攻:${physAtk} 法攻:${magAtk} | 请选 ${player.data.DMGnum} 个防御骰子")
 
         phase = GamePhase.PLAYER_DEFEND
-        lastAIDamage = atk
-        atk
+        physAtk + magAtk
     }
 
     public func playerDefend(): Int32 {
-        let defense = player.getSelectedSum()
-        log("玩家防御点数: ${defense}")
+        let physDef = player.getPhysSum()
+        let magDef = player.getMagSum()
+        log("玩家物防骰: ${physDef}(${player.getPhysCount()}个), 法防骰: ${magDef}(${player.getMagCount()}个)")
 
-        let actualDamage = max2(0, Int32(Float32(lastAIDamage) * player.data.damageMul) - defense)
-        player.hp = max2(0, player.hp - actualDamage)
-        log("玩家受到 ${actualDamage} 点伤害, 剩余HP: ${player.hp}/${player.data.maxHP}")
+        let physDmg = Int32(Float32(max2(0, lastAIPhysAtk - physDef)) * (Float32(1) - player.data.physicalDefense))
+        let magDmg = Int32(Float32(max2(0, lastAIMagAtk - magDef)) * (Float32(1) - player.data.magicalDefense))
+        let totalDmg = physDmg + magDmg
+        player.hp = max2(0, player.hp - totalDmg)
+        log("你受到 物伤:${physDmg} + 法伤:${magDmg} = ${totalDmg} 伤害, 剩余HP: ${player.hp}/${player.data.maxHP}")
 
-        player.addSkillPoints(lastAIDamage)
-        ai.addSkillPoints(lastAIDamage * 2)
+        player.addSkillPoints(lastAIPhysAtk + lastAIMagAtk)
+        ai.addSkillPoints((lastAIPhysAtk + lastAIMagAtk) * 2)
 
         phase = GamePhase.ROUND_RESULT
-        actualDamage
+        totalDmg
     }
 
     public func startNewRound(): Unit {
@@ -453,7 +534,8 @@ public class CardGameEngine {
     private func diceToString(ch: Character): String {
         var s: String = ""
         var pos: Int32 = 0
-        for (_ in 0..ch.data.dicenum) {
+        let totalDice = ch.data.dicenum
+        for (_ in 0..totalDice) {
             s = s + "${ch.getDice(pos)} "
             pos = pos + 1
         }

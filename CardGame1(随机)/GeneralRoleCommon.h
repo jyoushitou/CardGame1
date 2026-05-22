@@ -1,6 +1,0 @@
-#ifndef GENERALROLECOMMON_H
-#define GENERALROLECOMMON_H
-
-#include ""
-
-#endif // !GENERALROLECOMMON_H
