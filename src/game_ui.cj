@@ -11,6 +11,22 @@ public class CardGameUI {
     private var modeTitle: Label
     private var modeBtnAI: Button
     private var modeBtn2P: Button
+    private var modeBtnLAN: Button
+
+    //LAN Lobby
+    private var lobbyTitle: Label
+    private var lobbyBtnHost: Button
+    private var lobbyBtnJoin: Button
+    private var lobbyInfoLabel: Label
+    private var lobbyBackBtn: Button
+
+    //LAN Host / Client
+    private var lanServer: NetServer
+    private var lanClient: NetClient
+    private var lanPort: Int32
+    private var isHost: Bool
+    private var lanGameStarted: Bool
+    private var netLogText: String
 
     //Character Select
     private var selectTitle: Label
@@ -140,6 +156,48 @@ public class CardGameUI {
             "Microsoft YaHei", Float32(16), SizeScale.fixed(), Anchor.Center,
             ButtonStyle.outlined(), { => () })
         window.addWidget(modeBtn2P)
+
+        modeBtnLAN = Button("局域网联机",
+            Position.abs(WIN_W / Float32(2), Float32(260)), Float32(240), Float32(60),
+            "Microsoft YaHei", Float32(16), SizeScale.fixed(), Anchor.Center,
+            ButtonStyle.outlined(), { => () })
+        window.addWidget(modeBtnLAN)
+
+        //LAN LOBBY
+        lobbyTitle = Label("局域网联机",
+            Position.abs(OFF, OFF), c.accent,
+            "Microsoft YaHei", Float32(22), SizeScale.fixed(), Anchor.Center)
+        window.addWidget(lobbyTitle)
+
+        lobbyBtnHost = Button("创建房间",
+            Position.abs(OFF, OFF), Float32(240), Float32(60),
+            "Microsoft YaHei", Float32(16), SizeScale.fixed(), Anchor.Center,
+            ButtonStyle.outlined(), { => () })
+        window.addWidget(lobbyBtnHost)
+
+        lobbyBtnJoin = Button("加入房间",
+            Position.abs(OFF, OFF), Float32(240), Float32(60),
+            "Microsoft YaHei", Float32(16), SizeScale.fixed(), Anchor.Center,
+            ButtonStyle.outlined(), { => () })
+        window.addWidget(lobbyBtnJoin)
+
+        lobbyInfoLabel = Label("",
+            Position.abs(OFF, OFF), c.textSecondary,
+            "Microsoft YaHei", Float32(14), SizeScale.fixed(), Anchor.Center)
+        window.addWidget(lobbyInfoLabel)
+
+        lobbyBackBtn = Button("返回",
+            Position.abs(OFF, OFF), Float32(120), Float32(40),
+            "Microsoft YaHei", Float32(14), SizeScale.fixed(), Anchor.Center,
+            ButtonStyle.outlined(), { => () })
+        window.addWidget(lobbyBackBtn)
+
+        lanServer = NetServer()
+        lanClient = NetClient()
+        lanPort = 9527
+        isHost = false
+        lanGameStarted = false
+        netLogText = ""
 
         //SELECT SCREEN
         selectTitle = Label("选择你的角色",
@@ -347,12 +405,17 @@ public class CardGameUI {
 
         //WIRE
         wireCallbacks()
+        window.setIdleCallback({ => pollNetwork() })
         showModeScreen()
     }
 
     private func wireCallbacks(): Unit {
         modeBtnAI.onClick() { onModePick(false) }
         modeBtn2P.onClick() { onModePick(true) }
+        modeBtnLAN.onClick() { showLobbyScreen() }
+        lobbyBtnHost.onClick() { onHostRoom() }
+        lobbyBtnJoin.onClick() { onJoinRoom() }
+        lobbyBackBtn.onClick() { hideLobbyScreen(); showModeScreen() }
         let classes = getAllClasses()
         var cIdx: Int32 = 0
         for (cd in classes) {
@@ -388,6 +451,12 @@ public class CardGameUI {
         modeBtn2P.setPosition(Position.abs(WIN_W / Float32(2) + Float32(170), Float32(180)))
         modeBtn2P.setStyle(ButtonStyle.outlined())
 
+        modeBtnLAN.setText("局域网联机")
+        modeBtnLAN.setPosition(Position.abs(WIN_W / Float32(2), Float32(260)))
+        modeBtnLAN.setStyle(ButtonStyle.outlined())
+
+        hideLobbyScreen()
+
         selectTitle.setPosition(Position.abs(OFF, OFF))
         selectInfoLabel.setPosition(Position.abs(OFF, OFF))
         for (btn in classBtns) {
@@ -403,6 +472,8 @@ public class CardGameUI {
         modeBtnAI.setPosition(Position.abs(OFF, OFF))
         modeBtn2P.setText("")
         modeBtn2P.setPosition(Position.abs(OFF, OFF))
+        modeBtnLAN.setText("")
+        modeBtnLAN.setPosition(Position.abs(OFF, OFF))
     }
 
     private func onModePick(isTwoPlayer: Bool): Unit {
@@ -416,6 +487,357 @@ public class CardGameUI {
         }
         selectInfoLabel.setPosition(Position.abs(WIN_W / Float32(2), Float32(85)))
         showSelectScreen()
+    }
+
+    // --- LAN Lobby ---
+
+    private func showLobbyScreen(): Unit {
+        hideModeScreen()
+        lobbyTitle.setPosition(Position.abs(WIN_W / Float32(2), Float32(80)))
+        lobbyBtnHost.setPosition(Position.abs(WIN_W / Float32(2), Float32(170)))
+        lobbyBtnJoin.setPosition(Position.abs(WIN_W / Float32(2), Float32(250)))
+        lobbyInfoLabel.setText("")
+        lobbyInfoLabel.setPosition(Position.abs(WIN_W / Float32(2), Float32(320)))
+        lobbyBackBtn.setPosition(Position.abs(WIN_W / Float32(2), Float32(400)))
+    }
+
+    private func hideLobbyScreen(): Unit {
+        lobbyTitle.setPosition(Position.abs(OFF, OFF))
+        lobbyBtnHost.setPosition(Position.abs(OFF, OFF))
+        lobbyBtnJoin.setPosition(Position.abs(OFF, OFF))
+        lobbyInfoLabel.setPosition(Position.abs(OFF, OFF))
+        lobbyBackBtn.setPosition(Position.abs(OFF, OFF))
+    }
+
+    private func onHostRoom(): Unit {
+        netInit()
+        if (lanServer.start(lanPort)) {
+            isHost = true
+            lobbyInfoLabel.setText("等待对手连接...\n端口: ${lanPort}\n\n请将你的IP地址告诉对手")
+        } else {
+            lobbyInfoLabel.setText("创建房间失败!")
+        }
+    }
+
+    private func onJoinRoom(): Unit {
+        netInit()
+        lobbyInfoLabel.setText("正在搜索房间...")
+        let hosts = NetClient.discover(lanPort)
+        var host = ""
+        if (hosts.size > 0) {
+            host = hosts[0]
+        } else {
+            // Fallback: try localhost for testing
+            host = "127.0.0.1"
+        }
+        if (lanClient.connect(host, lanPort)) {
+            lobbyInfoLabel.setText("已连接到 ${host}\n等待房主开始游戏...")
+            // Send READY to host
+            lanClient.sendString(MsgBuilder(READY).build())
+        } else {
+            lobbyInfoLabel.setText("连接失败! (${host}:${lanPort})")
+        }
+    }
+
+    // Check if it's this player's turn in network mode
+    private func isMyTurn(): Bool {
+        if (!lanGameStarted) { return true }
+        let hostAttacks = engine.halfTurnCount % 2 == 0
+        match (engine.phase) {
+            case PLAYER_ROLL | PLAYER_ATTACK =>
+                isHost == hostAttacks
+            case PLAYER_DEFEND =>
+                isHost != hostAttacks
+            case _ => true
+        }
+    }
+
+    // Network poll - call each frame
+    public func pollNetwork(): Unit {
+        if (isHost) {
+            lanServer.acceptClient()
+            let msgs = lanServer.poll()
+            for (msg in msgs) {
+                handleNetMsg(msg)
+            }
+        } else if (lanClient.isConnected()) {
+            let msgs = lanClient.poll()
+            for (msg in msgs) {
+                handleNetMsg(msg)
+            }
+        }
+    }
+
+    private func sendToNet(msg: NetMsg): Unit {
+        if (isHost) {
+            lanServer.send(msg)
+        } else {
+            lanClient.send(msg)
+        }
+    }
+
+    private func sendToNetStr(wire: String): Unit {
+        if (isHost) {
+            lanServer.sendString(wire)
+        } else {
+            lanClient.sendString(wire)
+        }
+    }
+
+    private func handleNetMsg(msg: NetMsg): Unit {
+        match (msg.msgType) {
+            case READY =>
+                if (isHost) {
+                    lobbyInfoLabel.setText("对手已连接! 开始游戏中...")
+                    lanServer.sendString(MsgBuilder(GAME_START).build())
+                }
+                startNetGame()
+            case GAME_START =>
+                startNetGame()
+            case PHASE_CHANGE =>
+                if (!isHost && lanGameStarted) {
+                    // Host finished setup; now it's client's turn to pick
+                    selectInfoLabel.setPosition(Position.abs(OFF, OFF))
+                    selectTitle.setText("选择你的角色")
+                    showSelectScreen()
+                }
+            case PICK_CLASS =>
+                if (isHost && lanGameStarted) {
+                    let classId = msg.getInt("id")
+                    let classes = getAllClasses()
+                    for (cd in classes) {
+                        if (cd.id == classId) {
+                            engine.selectP2Class(cd)
+                            // Don't show screens — still waiting for PICK_RACE
+                        }
+                    }
+                }
+            case PICK_RACE =>
+                if (isHost && lanGameStarted) {
+                    let raceId = msg.getInt("id")
+                    let races = getAllRaces()
+                    for (rd in races) {
+                        if (rd.id == raceId) {
+                            engine.selectP2Race(rd)
+                            selectInfoLabel.setPosition(Position.abs(OFF, OFF))
+                            showBattleScreen()
+                            refreshUI()
+                            sendStateSync()
+                        }
+                    }
+                }
+            case STATE_SYNC =>
+                if (!isHost) {
+                    applyStateSync(msg)
+                }
+            case DICE_ROLL =>
+                if (isHost && lanGameStarted) {
+                    engine.playerRoll()
+                    refreshUI()
+                    sendStateSync()
+                }
+            case DICE_ASSIGN =>
+                if (isHost && lanGameStarted) {
+                    let diceOwner = engine.activeDiceOwner()
+                    let physIdx = decodeIntArray(msg.get("phys"))
+                    let magIdx = decodeIntArray(msg.get("mag"))
+                    // Clear and re-apply assignment
+                    diceOwner.clearSelection()
+                    for (idx in physIdx) {
+                        if (idx >= 0 && idx < Int32(diceOwner.physDice.size)) {
+                            let newPhys = ArrayList<Bool>()
+                            var pi: Int32 = 0
+                            for (_ in 0..Int32(diceOwner.physDice.size)) {
+                                newPhys.add(pi == idx)
+                                pi = pi + 1
+                            }
+                            diceOwner.physDice = newPhys
+                        }
+                    }
+                    for (idx in magIdx) {
+                        if (idx >= 0 && idx < Int32(diceOwner.magDice.size)) {
+                            let newMag = ArrayList<Bool>()
+                            var pi: Int32 = 0
+                            for (_ in 0..Int32(diceOwner.magDice.size)) {
+                                newMag.add(pi == idx)
+                                pi = pi + 1
+                            }
+                            diceOwner.magDice = newMag
+                        }
+                    }
+                    // Auto-execute the next step
+                    match (engine.phase) {
+                        case PLAYER_ATTACK =>
+                            engine.playerAttack()
+                            refreshUI()
+                            sendStateSync()
+                        case PLAYER_DEFEND =>
+                            engine.playerDefend()
+                            refreshUI()
+                            sendStateSync()
+                        case _ => ()
+                    }
+                }
+            case _ => ()
+        }
+    }
+
+    private func startNetGame(): Unit {
+        hideLobbyScreen()
+        if (isHost) {
+            engine.selectMode(GameMode.VS_PLAYER)
+            selectTitle.setText("选择你的角色")
+            showSelectScreen()
+        } else {
+            // Client: set mode, wait for host to pick first
+            engine.gameMode = GameMode.VS_PLAYER
+            selectTitle.setPosition(Position.abs(OFF, OFF))
+            selectInfoLabel.setText("等待房主选择职业和种族...")
+            selectInfoLabel.setPosition(Position.abs(WIN_W / Float32(2), Float32(200)))
+        }
+        lanGameStarted = true
+    }
+
+    // --- State Sync ---
+
+    private func sendStateSync(): Unit {
+        let b = MsgBuilder(STATE_SYNC)
+        b.addInt("phase", phaseToInt(engine.phase))
+        // Send player/ai directly — host and client mirror the same swap state
+        b.addInt("pl_hp", engine.player.hp)
+        b.addInt("pl_sp", engine.player.skillPoints)
+        b.addInt("pl_sh", engine.player.shields)
+        b.addInt("pl_rs", engine.player.raceStacks)
+        b.addInt("pl_bd", engine.player.bonusDice)
+        b.addInt("pl_cls", engine.player.data.id)
+        b.addInt("pl_rac", engine.player.race.id)
+        b.addInt("ai_hp", engine.ai.hp)
+        b.addInt("ai_sp", engine.ai.skillPoints)
+        b.addInt("ai_sh", engine.ai.shields)
+        b.addInt("ai_rs", engine.ai.raceStacks)
+        b.addInt("ai_bd", engine.ai.bonusDice)
+        b.addInt("ai_cls", engine.ai.data.id)
+        b.addInt("ai_rac", engine.ai.race.id)
+        b.addInt("gm", 1)  // gameMode: 1=VS_PLAYER
+        b.addInt("turn", engine.halfTurnCount)
+        // Dice results for active player
+        let diceOwner = engine.activeDiceOwner()
+        b.add("dice", encodeIntArray(diceOwner.diceResults))
+        b.add("physd", encodeBoolArray(diceOwner.physDice))
+        b.add("magd", encodeBoolArray(diceOwner.magDice))
+        // Log messages: build from ArrayList, use safe separator
+        var logText = ""
+        var firstLog = true
+        for (m in engine.messages) {
+            if (!firstLog) { logText = logText + "@@" }
+            for (r in m.runes()) {
+                if (r == r'|') { logText = logText + "!" }
+                else if (r == r'=') { logText = logText + ":" }
+                else { logText = logText + "${r}" }
+            }
+            firstLog = false
+        }
+        b.add("log", logText)
+        sendToNetStr(b.build())
+    }
+
+    private func applyStateSync(msg: NetMsg): Unit {
+        if (msg.getInt("gm") == 1) { engine.gameMode = GameMode.VS_PLAYER }
+        engine.phase = intToPhase(msg.getInt("phase"))
+        // Update class if changed (recreate Character, then restore state)
+        let plCls = msg.getInt("pl_cls")
+        let plRac = msg.getInt("pl_rac")
+        let aiCls = msg.getInt("ai_cls")
+        let aiRac = msg.getInt("ai_rac")
+        if (plCls > 0 && engine.player.data.id != plCls) {
+            for (cd in getAllClasses()) {
+                if (cd.id == plCls) { engine.player = Character(cd) }
+            }
+        }
+        if (aiCls > 0 && engine.ai.data.id != aiCls) {
+            for (cd in getAllClasses()) {
+                if (cd.id == aiCls) { engine.ai = Character(cd) }
+            }
+        }
+        // Set race
+        if (plRac > 0) {
+            for (rd in getAllRaces()) {
+                if (rd.id == plRac) { engine.player.race = rd }
+            }
+        }
+        if (aiRac > 0) {
+            for (rd in getAllRaces()) {
+                if (rd.id == aiRac) { engine.ai.race = rd }
+            }
+        }
+        // Apply state after class/race setup
+        engine.player.hp = msg.getInt("pl_hp")
+        engine.player.skillPoints = msg.getInt("pl_sp")
+        engine.player.shields = msg.getInt("pl_sh")
+        engine.player.raceStacks = msg.getInt("pl_rs")
+        engine.player.bonusDice = msg.getInt("pl_bd")
+        engine.ai.hp = msg.getInt("ai_hp")
+        engine.ai.skillPoints = msg.getInt("ai_sp")
+        engine.ai.shields = msg.getInt("ai_sh")
+        engine.ai.raceStacks = msg.getInt("ai_rs")
+        engine.ai.bonusDice = msg.getInt("ai_bd")
+        engine.halfTurnCount = msg.getInt("turn")
+        // Update dice for active player
+        let diceVals = decodeIntArray(msg.get("dice"))
+        let physAssign = decodeBoolArray(msg.get("physd"))
+        let magAssign = decodeBoolArray(msg.get("magd"))
+        if (diceVals.size > 0) {
+            engine.activeDiceOwner().diceResults = diceVals
+            engine.activeDiceOwner().physDice = physAssign
+            engine.activeDiceOwner().magDice = magAssign
+        }
+        // Update log for client
+        let logText = msg.get("log")
+        if (logText.size > 0) {
+            netLogText = logText
+        }
+        hideRaceScreen()
+        showBattleScreen()
+        refreshUI()
+    }
+
+    private func phaseToInt(phase: GamePhase): Int32 {
+        match (phase) {
+            case SELECT_MODE => 0
+            case SELECT_CHARACTER => 1
+            case SELECT_RACE => 2
+            case SELECT_CHARACTER_P2 => 3
+            case SELECT_RACE_P2 => 4
+            case PLAYER_ROLL => 5
+            case PLAYER_ATTACK => 6
+            case AI_TURN => 7
+            case PLAYER_DEFEND => 8
+            case ROUND_RESULT => 9
+            case GAME_OVER => 10
+        }
+    }
+
+    private func intToPhase(i: Int32): GamePhase {
+        if (i == 0) { SELECT_MODE }
+        else if (i == 1) { SELECT_CHARACTER }
+        else if (i == 2) { SELECT_RACE }
+        else if (i == 3) { SELECT_CHARACTER_P2 }
+        else if (i == 4) { SELECT_RACE_P2 }
+        else if (i == 5) { PLAYER_ROLL }
+        else if (i == 6) { PLAYER_ATTACK }
+        else if (i == 7) { AI_TURN }
+        else if (i == 8) { PLAYER_DEFEND }
+        else if (i == 9) { ROUND_RESULT }
+        else { GAME_OVER }
+    }
+
+    private func hideSelectScreenLocal(): Unit {
+        selectTitle.setPosition(Position.abs(OFF, OFF))
+        selectInfoLabel.setPosition(Position.abs(OFF, OFF))
+        for (b in classBtns) {
+            b.setText("")
+            b.setPosition(Position.abs(OFF, OFF))
+        }
     }
 
     //Screen Toggle
@@ -590,13 +1012,31 @@ public class CardGameUI {
     }
 
     private func onClassPicked(cd: CharData): Unit {
+        // Network mode: client sends pick to host
+        if (lanGameStarted && !isHost) {
+            sendToNetStr(MsgBuilder(PICK_CLASS).addInt("id", cd.id).build())
+            selectInfoLabel.setText("已选择 ${cd.name}，等待对手...")
+            selectTitle.setPosition(Position.abs(OFF, OFF))
+            selectInfoLabel.setPosition(Position.abs(WIN_W / Float32(2), Float32(200)))
+            for (b in classBtns) {
+                b.setText("")
+                b.setPosition(Position.abs(OFF, OFF))
+            }
+            // Client also picks race immediately
+            raceTitle.setText("选择你的种族")
+            showRaceScreen()
+            return
+        }
         match (engine.phase) {
             case GamePhase.SELECT_CHARACTER =>
                 engine.selectPlayerClass(cd)
-                if (engine.gameMode == GameMode.VS_PLAYER) {
+                if (lanGameStarted && isHost) {
+                    // Host P1: go to race selection
+                    raceTitle.setText("选择你的种族")
+                } else if (engine.gameMode == GameMode.VS_PLAYER) {
                     selectTitle.setText("玩家1 — 选择角色")
+                    raceTitle.setText("玩家1 — 选择种族")
                 }
-                raceTitle.setText("玩家1 — 选择种族")
                 selectTitle.setPosition(Position.abs(OFF, OFF))
                 selectInfoLabel.setPosition(Position.abs(OFF, OFF))
                 for (b in classBtns) {
@@ -619,10 +1059,25 @@ public class CardGameUI {
     }
 
     private func onRacePicked(rd: RaceData): Unit {
+        // Network mode: client sends pick to host, then waits
+        if (lanGameStarted && !isHost) {
+            sendToNetStr(MsgBuilder(PICK_RACE).addInt("id", rd.id).build())
+            hideRaceScreen()
+            selectInfoLabel.setText("已选择 ${rd.name}，等待房主开始对战...")
+            selectInfoLabel.setPosition(Position.abs(WIN_W / Float32(2), Float32(250)))
+            return
+        }
         match (engine.phase) {
             case GamePhase.SELECT_RACE =>
                 engine.selectPlayerRace(rd)
-                if (engine.gameMode == GameMode.VS_PLAYER) {
+                if (lanGameStarted && isHost) {
+                    // Host P1 done; tell client to pick, then wait
+                    hideRaceScreen()
+                    selectInfoLabel.setText("等待对手选择职业和种族...")
+                    selectInfoLabel.setPosition(Position.abs(WIN_W / Float32(2), Float32(250)))
+                    // Signal client it's their turn
+                    sendToNetStr(MsgBuilder(PHASE_CHANGE).addInt("phase", phaseToInt(engine.phase)).build())
+                } else if (engine.gameMode == GameMode.VS_PLAYER) {
                     selectTitle.setText("玩家2 — 选择角色")
                     hideRaceScreen()
                     showSelectScreen()
@@ -636,11 +1091,15 @@ public class CardGameUI {
                 hideRaceScreen()
                 showBattleScreen()
                 refreshUI()
+                if (lanGameStarted && isHost) {
+                    sendStateSync()
+                }
             case _ => ()
         }
     }
 
     private func onSkillToggle(): Unit {
+        if (!isMyTurn()) { return }
         engine.addSkillStack()
         refreshSkillButton()
         refreshSkillBars()
@@ -648,6 +1107,7 @@ public class CardGameUI {
     }
 
     private func onDiceClick(index: Int32): Unit {
+        if (!isMyTurn()) { return }
         let diceOwner = engine.activeDiceOwner()
         if (index >= Int32(diceOwner.diceResults.size)) { return }
         match (engine.phase) {
@@ -664,10 +1124,57 @@ public class CardGameUI {
     }
 
     private func onAction(): Unit {
+        if (!isMyTurn()) { return }
+        // Network client: send actions to host
+        if (lanGameStarted && !isHost) {
+            match (engine.phase) {
+                case PLAYER_ROLL =>
+                    sendToNetStr(MsgBuilder(DICE_ROLL).build())
+                case PLAYER_ATTACK =>
+                    let need = engine.player.data.ATKnum
+                    if (engine.player.getTotalCount() != need) {
+                        engine.log("请分配 ${need} 个骰子到物攻/法攻!")
+                        refreshMessageLog()
+                        return
+                    }
+                    // Send dice assignment to host
+                    let diceOwner = engine.activeDiceOwner()
+                    let physIdx = ArrayList<Int32>()
+                    let magIdx = ArrayList<Int32>()
+                    var pos: Int32 = 0
+                    for (_ in 0..Int32(diceOwner.diceResults.size)) {
+                        if (diceOwner.isPhysDice(pos)) { physIdx.add(pos) }
+                        if (diceOwner.isMagDice(pos)) { magIdx.add(pos) }
+                        pos = pos + 1
+                    }
+                    sendToNetStr(MsgBuilder(DICE_ASSIGN).add("phys", encodeIntArray(physIdx)).add("mag", encodeIntArray(magIdx)).build())
+                case PLAYER_DEFEND =>
+                    let diceOwner = engine.activeDiceOwner()
+                    let need = diceOwner.data.DMGnum
+                    if (diceOwner.getTotalCount() != need) {
+                        engine.log("请分配 ${need} 个骰子到物防/法防!")
+                        refreshMessageLog()
+                        return
+                    }
+                    let physIdx = ArrayList<Int32>()
+                    let magIdx = ArrayList<Int32>()
+                    var pos: Int32 = 0
+                    for (_ in 0..Int32(diceOwner.diceResults.size)) {
+                        if (diceOwner.isPhysDice(pos)) { physIdx.add(pos) }
+                        if (diceOwner.isMagDice(pos)) { magIdx.add(pos) }
+                        pos = pos + 1
+                    }
+                    sendToNetStr(MsgBuilder(DICE_ASSIGN).add("phys", encodeIntArray(physIdx)).add("mag", encodeIntArray(magIdx)).build())
+                case _ => ()
+            }
+            return
+        }
+
         match (engine.phase) {
             case GamePhase.PLAYER_ROLL =>
                 engine.playerRoll()
                 refreshUI()
+                if (isHost && lanGameStarted) { sendStateSync() }
 
             case GamePhase.PLAYER_ATTACK =>
                 let need = engine.player.data.ATKnum
@@ -681,6 +1188,7 @@ public class CardGameUI {
                     engine.aiAttack()
                 }
                 refreshUI()
+                if (isHost && lanGameStarted) { sendStateSync() }
 
             case GamePhase.PLAYER_DEFEND =>
                 let diceOwner = engine.activeDiceOwner()
@@ -692,10 +1200,12 @@ public class CardGameUI {
                 }
                 engine.playerDefend()
                 refreshUI()
+                if (isHost && lanGameStarted) { sendStateSync() }
 
             case GamePhase.ROUND_RESULT =>
                 engine.startNewRound()
                 refreshUI()
+                if (isHost && lanGameStarted) { sendStateSync() }
 
             case GamePhase.GAME_OVER =>
                 engine = CardGameEngine()
@@ -860,6 +1370,10 @@ public class CardGameUI {
     }
 
     private func refreshActionButton(): Unit {
+        if (lanGameStarted && !isMyTurn()) {
+            actionBtn.setText("等待对手...")
+            return
+        }
         match (engine.phase) {
             case GamePhase.PLAYER_ROLL => actionBtn.setText("掷骰子")
             case GamePhase.PLAYER_ATTACK => actionBtn.setText("确认攻击")
@@ -902,7 +1416,24 @@ public class CardGameUI {
     }
 
     private func refreshMessageLog(): Unit {
-        messageLabel.setText(engine.getRecentMessages())
+        if (lanGameStarted && !isHost) {
+            // Restore newlines from @@ separator
+            var displayText = ""
+            let len = Int32(netLogText.size)
+            var i: Int32 = 0
+            while (i < len) {
+                if (i + 1 < len && charAt(netLogText, i) == "@" && charAt(netLogText, i + 1) == "@") {
+                    displayText = displayText + "\n"
+                    i = i + 2
+                } else {
+                    displayText = displayText + charAt(netLogText, i)
+                    i = i + 1
+                }
+            }
+            messageLabel.setText(displayText)
+        } else {
+            messageLabel.setText(engine.getRecentMessages())
+        }
         messageScroll.scrollBy(Float32(0), Float32(9999))
     }
 

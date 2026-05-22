@@ -201,8 +201,14 @@ __declspec(dllexport) int bridge_run_loop() {
 
 __declspec(dllexport) int bridge_process_message() {
     MSG msg;
-    if (GetMessageW(&msg, NULL, 0, 0)) { TranslateMessage(&msg); DispatchMessageW(&msg); return 1; }
-    return 0;
+    if (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+        if (msg.message == WM_QUIT) return 0;
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+        return 1;
+    }
+    Sleep(1);  // Yield CPU when idle, keeps poll rate high
+    return 1;
 }
 
 __declspec(dllexport) void bridge_post_quit() { PostQuitMessage(0); }

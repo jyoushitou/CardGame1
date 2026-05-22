@@ -30,6 +30,7 @@ public class Window {
     private var overlayWidget: Option<Widget>
     private var mainWidget: Option<Widget>
     private var onFileDrop: Option<(ArrayList<String>) -> Unit>
+    private var idleCallback: Option<() -> Unit>
 
     public init(title: String, width: Int32, height: Int32) {
         this.title = title
@@ -58,6 +59,7 @@ public class Window {
         this.contextMenu = None<ContextMenu>
         this.mainWidget = None<Widget>
         this.onFileDrop = None<(ArrayList<String>) -> Unit>
+        this.idleCallback = None<() -> Unit>
 
         ffi_gdipInit()
 
@@ -117,6 +119,8 @@ public class Window {
     public func showOverlay(widget: Widget): Unit { this.overlayWidget = Some(widget) }
 
     public func dismissOverlay(): Unit { this.overlayWidget = None }
+
+    public func setIdleCallback(cb: () -> Unit): Unit { this.idleCallback = Some(cb) }
 
     public func hasOverlay(): Bool {
         match (overlayWidget) {
@@ -204,6 +208,12 @@ public class Window {
         render()
 
         while (true) {
+            // Always call idle callback (e.g. network poll)
+            match (idleCallback) {
+                case Some(cb) => cb()
+                case None => ()
+            }
+
             let needsRender = unsafe { bridge_window_needs_render(hwnd) }
             if (needsRender) {
                 render()
