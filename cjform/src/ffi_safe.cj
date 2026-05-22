@@ -169,6 +169,12 @@ public func ffi_isNullPtr(ptr: CPointer<Byte>): Bool {
     unsafe { bridge_is_null_ptr(ptr) }
 }
 
+// --- Render ---
+
+public func ffi_requestRender(hwnd: CPointer<Byte>): Unit {
+    unsafe { bridge_window_request_render(hwnd) }
+}
+
 // --- GDI+ ---
 
 public func ffi_getDpiScale(hwnd: CPointer<Byte>): Float32 {

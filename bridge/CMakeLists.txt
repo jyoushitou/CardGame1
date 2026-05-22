@@ -16,7 +16,7 @@ add_library(bridge SHARED
     net_ffi.cpp
 )
 
-target_link_libraries(bridge PRIVATE user32 gdi32 gdiplus dwmapi ws2_32)
+target_link_libraries(bridge PRIVATE user32 gdi32 gdiplus dwmapi ws2_32 winmm)
 
 set_target_properties(bridge PROPERTIES
     PREFIX ""

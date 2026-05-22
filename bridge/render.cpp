@@ -187,6 +187,11 @@ __declspec(dllexport) void bridge_window_clear_needs_render(HWND hwnd) {
     if (ctx) ctx->needsRender = false;
 }
 
+__declspec(dllexport) void bridge_window_request_render(HWND hwnd) {
+    WindowContext* ctx = (WindowContext*)GetPropW(hwnd, L"CjFormCtx");
+    if (ctx) ctx->needsRender = true;
+}
+
 __declspec(dllexport) void bridge_window_present(HWND hwnd) {
     WindowContext* ctx = (WindowContext*)GetPropW(hwnd, L"CjFormCtx");
     if (ctx) { BitBlt(ctx->hdc, 0, 0, ctx->width, ctx->height, ctx->memDC, 0, 0, SRCCOPY);

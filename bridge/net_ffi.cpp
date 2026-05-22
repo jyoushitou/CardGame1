@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <timeapi.h>
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -11,6 +12,7 @@ static bool g_netInitialized = false;
 
 __declspec(dllexport) int bridge_net_init() {
     if (g_netInitialized) return 1;
+    timeBeginPeriod(1);
     WSADATA wsaData;
     int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (result == 0) {

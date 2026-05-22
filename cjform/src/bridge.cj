@@ -42,6 +42,8 @@ foreign func bridge_window_needs_render(hwnd: CPointer<Byte>): Bool
 
 foreign func bridge_window_clear_needs_render(hwnd: CPointer<Byte>): Unit
 
+foreign func bridge_window_request_render(hwnd: CPointer<Byte>): Unit
+
 foreign func bridge_window_get_width(hwnd: CPointer<Byte>): Int32
 
 foreign func bridge_window_get_height(hwnd: CPointer<Byte>): Int32

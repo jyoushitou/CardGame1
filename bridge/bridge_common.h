@@ -97,6 +97,7 @@ __declspec(dllexport) void bridge_gdip_draw_text_aligned(HWND hwnd, float x, flo
     unsigned char r, unsigned char g, unsigned char b, unsigned char a);
 __declspec(dllexport) bool bridge_window_needs_render(HWND hwnd);
 __declspec(dllexport) void bridge_window_clear_needs_render(HWND hwnd);
+__declspec(dllexport) void bridge_window_request_render(HWND hwnd);
 __declspec(dllexport) void bridge_window_present(HWND hwnd);
 __declspec(dllexport) int bridge_window_get_width(HWND hwnd);
 __declspec(dllexport) int bridge_window_get_height(HWND hwnd);

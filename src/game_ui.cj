@@ -27,6 +27,9 @@ public class CardGameUI {
     private var isHost: Bool
     private var lanGameStarted: Bool
     private var netLogText: String
+    private var discovering: Bool
+    private var connecting: Bool
+    private var connectHost: String
 
     //Character Select
     private var selectTitle: Label
@@ -198,6 +201,9 @@ public class CardGameUI {
         isHost = false
         lanGameStarted = false
         netLogText = ""
+        discovering = false
+        connecting = false
+        connectHost = ""
 
         //SELECT SCREEN
         selectTitle = Label("选择你的角色",
@@ -511,6 +517,7 @@ public class CardGameUI {
         netInit()
         if (lanServer.start(lanPort)) {
             isHost = true
+            lanServer.startDiscovery(lanPort)
             lobbyInfoLabel.setText("等待对手连接...\n端口: ${lanPort}\n\n请将你的IP地址告诉对手")
         } else {
             lobbyInfoLabel.setText("创建房间失败!")
@@ -519,22 +526,9 @@ public class CardGameUI {
 
     private func onJoinRoom(): Unit {
         netInit()
+        discovering = true
+        lanClient.startDiscovery(lanPort)
         lobbyInfoLabel.setText("正在搜索房间...")
-        let hosts = NetClient.discover(lanPort)
-        var host = ""
-        if (hosts.size > 0) {
-            host = hosts[0]
-        } else {
-            //Fallback: try localhost for testing
-            host = "127.0.0.1"
-        }
-        if (lanClient.connect(host, lanPort)) {
-            lobbyInfoLabel.setText("已连接到 ${host}\n等待房主开始游戏...")
-            //Send READY to host
-            lanClient.sendString(MsgBuilder(READY).build())
-        } else {
-            lobbyInfoLabel.setText("连接失败! (${host}:${lanPort})")
-        }
     }
 
     //Check if it's this player's turn in network mode
@@ -554,14 +548,47 @@ public class CardGameUI {
     public func pollNetwork(): Unit {
         if (isHost) {
             lanServer.acceptClient()
+            lanServer.pollDiscovery()
             let msgs = lanServer.poll()
-            for (msg in msgs) {
-                handleNetMsg(msg)
+            if (msgs.size > 0) {
+                for (msg in msgs) {
+                    handleNetMsg(msg)
+                }
+                window.requestRender()
             }
         } else if (lanClient.isConnected()) {
             let msgs = lanClient.poll()
-            for (msg in msgs) {
-                handleNetMsg(msg)
+            if (msgs.size > 0) {
+                for (msg in msgs) {
+                    handleNetMsg(msg)
+                }
+                window.requestRender()
+            }
+        } else if (discovering) {
+            let hosts = lanClient.pollDiscovery()
+            if (hosts.size > 0) {
+                discovering = false
+                lanClient.stopDiscovery()
+                connectHost = hosts[0]
+                connecting = true
+                lanClient.startConnect(connectHost, lanPort)
+                lobbyInfoLabel.setText("正在连接 ${connectHost}...")
+                window.requestRender()
+            } else if (!lanClient.isDiscovering()) {
+                discovering = false
+                lobbyInfoLabel.setText("未发现房间\n请确保与房主在同一局域网\n(小蓝盾需双方加入同一虚拟网络)")
+                window.requestRender()
+            }
+        } else if (connecting) {
+            if (lanClient.pollConnect()) {
+                connecting = false
+                lobbyInfoLabel.setText("已连接到 ${connectHost}\n等待房主开始游戏...")
+                lanClient.sendString(MsgBuilder(READY).build())
+                window.requestRender()
+            } else if (!lanClient.isConnecting()) {
+                connecting = false
+                lobbyInfoLabel.setText("连接失败! (${connectHost}:${lanPort})")
+                window.requestRender()
             }
         }
     }
@@ -620,7 +647,7 @@ public class CardGameUI {
                             selectInfoLabel.setPosition(Position.abs(OFF, OFF))
                             showBattleScreen()
                             refreshUI()
-                            sendStateSync()
+                            sendStateSync(false)
                         }
                     }
                 }
@@ -628,11 +655,17 @@ public class CardGameUI {
                 if (!isHost) {
                     applyStateSync(msg)
                 }
+            case SKILL_TOGGLE =>
+                if (isHost && lanGameStarted) {
+                    engine.addSkillStack()
+                    refreshUI()
+                    sendStateSync(true)
+                }
             case DICE_ROLL =>
                 if (isHost && lanGameStarted) {
                     engine.playerRoll()
                     refreshUI()
-                    sendStateSync()
+                    sendStateSync(false)
                 }
             case DICE_ASSIGN =>
                 if (isHost && lanGameStarted) {
@@ -646,7 +679,7 @@ public class CardGameUI {
                             let newPhys = ArrayList<Bool>()
                             var pi: Int32 = 0
                             for (_ in 0..Int32(diceOwner.physDice.size)) {
-                                newPhys.add(pi == idx)
+                                newPhys.add(diceOwner.isPhysDice(pi) || pi == idx)
                                 pi = pi + 1
                             }
                             diceOwner.physDice = newPhys
@@ -657,7 +690,7 @@ public class CardGameUI {
                             let newMag = ArrayList<Bool>()
                             var pi: Int32 = 0
                             for (_ in 0..Int32(diceOwner.magDice.size)) {
-                                newMag.add(pi == idx)
+                                newMag.add(diceOwner.isMagDice(pi) || pi == idx)
                                 pi = pi + 1
                             }
                             diceOwner.magDice = newMag
@@ -668,11 +701,11 @@ public class CardGameUI {
                         case PLAYER_ATTACK =>
                             engine.playerAttack()
                             refreshUI()
-                            sendStateSync()
+                            sendStateSync(false)
                         case PLAYER_DEFEND =>
                             engine.playerDefend()
                             refreshUI()
-                            sendStateSync()
+                            sendStateSync(false)
                         case _ => ()
                     }
                 }
@@ -696,7 +729,7 @@ public class CardGameUI {
         lanGameStarted = true
     }
 
-    private func sendStateSync(): Unit {
+    private func sendStateSync(skipDice: Bool): Unit {
         let b = MsgBuilder(STATE_SYNC)
         b.addInt("phase", phaseToInt(engine.phase))
         //Send player/ai directly — host and client mirror the same swap state
@@ -716,10 +749,13 @@ public class CardGameUI {
         b.addInt("ai_rac", engine.ai.race.id)
         b.addInt("gm", 1)
         b.addInt("turn", engine.halfTurnCount)
-        let diceOwner = engine.activeDiceOwner()
-        b.add("dice", encodeIntArray(diceOwner.diceResults))
-        b.add("physd", encodeBoolArray(diceOwner.physDice))
-        b.add("magd", encodeBoolArray(diceOwner.magDice))
+        b.addInt("skstk", engine.playerSkillStacks)
+        if (!skipDice) {
+            let diceOwner = engine.activeDiceOwner()
+            b.add("dice", encodeIntArray(diceOwner.diceResults))
+            b.add("physd", encodeBoolArray(diceOwner.physDice))
+            b.add("magd", encodeBoolArray(diceOwner.magDice))
+        }
         var logText = ""
         var firstLog = true
         for (m in engine.messages) {
@@ -773,6 +809,7 @@ public class CardGameUI {
         engine.ai.raceStacks = msg.getInt("ai_rs")
         engine.ai.bonusDice = msg.getInt("ai_bd")
         engine.halfTurnCount = msg.getInt("turn")
+        engine.playerSkillStacks = msg.getInt("skstk")
         //Update dice for active player
         let diceVals = decodeIntArray(msg.get("dice"))
         let physAssign = decodeBoolArray(msg.get("physd"))
@@ -1083,7 +1120,7 @@ public class CardGameUI {
                 showBattleScreen()
                 refreshUI()
                 if (lanGameStarted && isHost) {
-                    sendStateSync()
+                    sendStateSync(false)
                 }
             case _ => ()
         }
@@ -1091,6 +1128,16 @@ public class CardGameUI {
 
     private func onSkillToggle(): Unit {
         if (!isMyTurn()) { return }
+        if (lanGameStarted && !isHost) {
+            if (engine.player.canUseSkill()) {
+                engine.addSkillStack()
+                refreshSkillButton()
+                refreshSkillBars()
+                refreshMessageLog()
+            }
+            sendToNetStr(MsgBuilder(SKILL_TOGGLE).build())
+            return
+        }
         engine.addSkillStack()
         refreshSkillButton()
         refreshSkillBars()
@@ -1165,7 +1212,7 @@ public class CardGameUI {
             case GamePhase.PLAYER_ROLL =>
                 engine.playerRoll()
                 refreshUI()
-                if (isHost && lanGameStarted) { sendStateSync() }
+                if (isHost && lanGameStarted) { sendStateSync(false) }
 
             case GamePhase.PLAYER_ATTACK =>
                 let need = engine.player.data.ATKnum
@@ -1179,7 +1226,7 @@ public class CardGameUI {
                     engine.aiAttack()
                 }
                 refreshUI()
-                if (isHost && lanGameStarted) { sendStateSync() }
+                if (isHost && lanGameStarted) { sendStateSync(false) }
 
             case GamePhase.PLAYER_DEFEND =>
                 let diceOwner = engine.activeDiceOwner()
@@ -1191,12 +1238,12 @@ public class CardGameUI {
                 }
                 engine.playerDefend()
                 refreshUI()
-                if (isHost && lanGameStarted) { sendStateSync() }
+                if (isHost && lanGameStarted) { sendStateSync(false) }
 
             case GamePhase.ROUND_RESULT =>
                 engine.startNewRound()
                 refreshUI()
-                if (isHost && lanGameStarted) { sendStateSync() }
+                if (isHost && lanGameStarted) { sendStateSync(false) }
 
             case GamePhase.GAME_OVER =>
                 engine = CardGameEngine()
@@ -1295,11 +1342,11 @@ public class CardGameUI {
                 bottomName = if (isP1Att) { "玩家1" } else { "玩家2" }
                 topName = if (isP1Att) { "玩家2" } else { "玩家1" }
             }
-            playerNameLabel.setText("${bottomName}: ${bottom.data.name}[${bottom.race.name}] (物防${bottom.data.physicalDefense} 法防${bottom.data.magicalDefense})")
-            aiNameLabel.setText("${topName}: ${top.data.name}[${top.race.name}] (物防${top.data.physicalDefense} 法防${top.data.magicalDefense})")
+            playerNameLabel.setText("${bottomName}: ${bottom.data.name}[${bottom.race.name}] (物防${bottom.effPhysDef()} 法防${bottom.effMagDef()})")
+            aiNameLabel.setText("${topName}: ${top.data.name}[${top.race.name}] (物防${top.effPhysDef()} 法防${top.effMagDef()})")
         } else {
-            aiNameLabel.setText("AI: ${top.data.name}[${top.race.name}] (物防${top.data.physicalDefense} 法防${top.data.magicalDefense})")
-            playerNameLabel.setText("你: ${bottom.data.name}[${bottom.race.name}] (物防${bottom.data.physicalDefense} 法防${bottom.data.magicalDefense})")
+            aiNameLabel.setText("AI: ${top.data.name}[${top.race.name}] (物防${top.effPhysDef()} 法防${top.effMagDef()})")
+            playerNameLabel.setText("你: ${bottom.data.name}[${bottom.race.name}] (物防${bottom.effPhysDef()} 法防${bottom.effMagDef()})")
         }
     }
 

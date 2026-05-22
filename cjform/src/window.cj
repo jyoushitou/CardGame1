@@ -122,6 +122,8 @@ public class Window {
 
     public func setIdleCallback(cb: () -> Unit): Unit { this.idleCallback = Some(cb) }
 
+    public func requestRender(): Unit { ffi_requestRender(hwnd) }
+
     public func hasOverlay(): Bool {
         match (overlayWidget) {
             case Some(_) => true

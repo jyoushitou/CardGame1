@@ -7,12 +7,14 @@ public class NetServer {
     private var clientHandle: Int64
     private var reader: StreamReader
     private var active: Bool
+    private var udpHandle: Int64
 
     public init() {
         this.serverHandle = Int64(-1)
         this.clientHandle = Int64(-1)
         this.reader = StreamReader()
         this.active = false
+        this.udpHandle = Int64(-1)
     }
 
     public func start(port: Int32): Bool {
@@ -66,4 +68,28 @@ public class NetServer {
 
     public func isActive(): Bool { active }
     public func hasClient(): Bool { clientHandle >= Int64(0) }
+
+    // Start UDP discovery responder (continuous)
+    public func startDiscovery(port: Int32): Unit {
+        udpHandle = netUdpCreate(port)
+    }
+
+    // Poll for DISCOVER and reply ANNOUNCE (call each frame)
+    public func pollDiscovery(): Unit {
+        if (udpHandle < Int64(0)) { return }
+        while (true) {
+            let (host, data, srcPort) = netUdpRecv(udpHandle)
+            if (host.size == 0 || data.size == 0) { break }
+            let parsed = deserialize(data)
+            if (parsed.msgType == DISCOVER) {
+                let resp = MsgBuilder(ANNOUNCE).add("name", "Host").build()
+                netUdpSend(udpHandle, host, srcPort, resp)
+            }
+        }
+    }
+
+    public func stopDiscovery(): Unit {
+        if (udpHandle >= Int64(0)) { netUdpClose(udpHandle) }
+        udpHandle = Int64(-1)
+    }
 }
