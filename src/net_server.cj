@@ -22,9 +22,8 @@ public class NetServer {
         true
     }
 
-    // Non-blocking: check for client connection
     public func acceptClient(): Bool {
-        if (clientHandle >= Int64(0)) { return true } // Already connected
+        if (clientHandle >= Int64(0)) { return true }
         let client = netServerAccept(serverHandle)
         if (client > Int64(0)) {
             clientHandle = client
@@ -33,7 +32,6 @@ public class NetServer {
         false
     }
 
-    // Non-blocking: read incoming messages
     public func poll(): ArrayList<NetMsg> {
         let msgs = ArrayList<NetMsg>()
         if (clientHandle < Int64(0)) { return msgs }
@@ -47,7 +45,6 @@ public class NetServer {
         msgs
     }
 
-    // Send a message to the client
     public func send(msg: NetMsg): Unit {
         if (clientHandle < Int64(0)) { return }
         let wire = msg.toWire() + "\n"

@@ -2,8 +2,6 @@ package myapp
 
 import std.collection.*
 
-// --- Message types ---
-
 public enum MsgType {
     | DISCOVER
     | ANNOUNCE
@@ -96,8 +94,6 @@ func stringToMsgType(s: String): MsgType {
     UNKNOWN
 }
 
-// --- Key-value pair ---
-
 public struct KvPair {
     var key: String
     var value: String
@@ -107,8 +103,6 @@ public struct KvPair {
         this.value = v
     }
 }
-
-// --- NetMsg: parsed network message ---
 
 public class NetMsg {
     public var msgType: MsgType
@@ -155,8 +149,6 @@ public class NetMsg {
     }
 }
 
-// --- MsgBuilder: fluent wire-format builder ---
-
 public class MsgBuilder {
     private var msgType: MsgType
     private var parts: ArrayList<String>
@@ -189,8 +181,6 @@ public class MsgBuilder {
     }
 }
 
-// --- Deserialization ---
-
 public func deserialize(raw: String): NetMsg {
     let parts = splitBy(raw, "|")
     if (parts.size == 0) {
@@ -208,8 +198,6 @@ public func deserialize(raw: String): NetMsg {
     }
     msg
 }
-
-// --- TCP stream reader (newline-delimited frames) ---
 
 public class StreamReader {
     private var buffer: String
@@ -233,8 +221,6 @@ public class StreamReader {
         msgs
     }
 }
-
-// --- String helpers (work with String, not Rune) ---
 
 func splitBy(s: String, delim: String): ArrayList<String> {
     let result = ArrayList<String>()
@@ -285,7 +271,6 @@ func indexOf(s: String, sub: String): Int32 {
 func charAt(s: String, idx: Int32): String {
     let len = Int32(s.size)
     if (idx < 0 || idx >= len) { return "" }
-    // Use substring to extract one char (Cangjie strings are UTF-16 on Windows)
     slice(s, idx, idx + 1)
 }
 
@@ -296,10 +281,8 @@ func slice(s: String, start: Int32, end: Int32): String {
     if (a < 0) { a = 0 }
     if (b > len) { b = len }
     if (a >= b) { return "" }
-    // Build result character by character
     var result = ""
     var i: Int32 = 0
-    // Cangjie strings support indexed access via runes
     for (r in s.runes()) {
         if (i >= a && i < b) {
             result = result + "${r}"
@@ -336,8 +319,6 @@ func parseInt(s: String): Int32 {
     if (neg) { -result } else { result }
 }
 
-// --- Int array serialization ---
-
 public func encodeIntArray(arr: ArrayList<Int32>): String {
     if (arr.size == 0) { return "" }
     var s = ""
@@ -359,8 +340,6 @@ public func decodeIntArray(s: String): ArrayList<Int32> {
     }
     result
 }
-
-// --- Bool array serialization ---
 
 public func encodeBoolArray(arr: ArrayList<Bool>): String {
     if (arr.size == 0) { return "" }

@@ -16,8 +16,6 @@ public class NetClient {
     public func connect(host: String, port: Int32): Bool {
         handle = netClientConnect(host, port)
         if (handle < Int64(0)) { return false }
-        // Non-blocking connect — wait a bit for connection
-        // In practice, poll will check for data
         connected = true
         true
     }
@@ -54,24 +52,18 @@ public class NetClient {
 
     public func isConnected(): Bool { connected }
 
-    // --- UDP Discovery helpers ---
-
     public static func discover(port: Int32): ArrayList<String> {
         let hosts = ArrayList<String>()
         let udpHandle = netUdpCreate(0)
         if (udpHandle < Int64(0)) { return hosts }
-
-        // Send DISCOVER broadcast
         let msg = MsgBuilder(DISCOVER).build()
         netUdpSend(udpHandle, "255.255.255.255", port, msg)
 
-        // Collect responses (up to 5)
         for (_ in 0..5) {
             let (host, data, _) = netUdpRecv(udpHandle)
             if (host.size > 0 && data.size > 0) {
                 let parsed = deserialize(data)
                 if (parsed.msgType == ANNOUNCE) {
-                    // Don't add duplicates
                     var dup = false
                     for (h in hosts) {
                         if (h == host) { dup = true }

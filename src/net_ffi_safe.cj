@@ -2,8 +2,6 @@ package myapp
 
 import cjform.*
 
-// --- FFI declarations (must be in same package as callers) ---
-
 foreign func bridge_net_init(): Int32
 foreign func bridge_net_cleanup(): Unit
 foreign func bridge_net_server_create(port: Int32): Int64
@@ -19,8 +17,6 @@ foreign func bridge_net_udp_recv(handle: Int64, buffer: CPointer<Byte>, bufferSi
 foreign func bridge_net_udp_close(handle: Int64): Unit
 foreign func bridge_net_close(handle: Int64): Unit
 
-// --- Init ---
-
 public func netInit(): Bool {
     let result = unsafe { bridge_net_init() }
     result != 0
@@ -29,8 +25,6 @@ public func netInit(): Bool {
 public func netCleanup(): Unit {
     unsafe { bridge_net_cleanup() }
 }
-
-// --- TCP Server ---
 
 public func netServerCreate(port: Int32): Int64 {
     unsafe { bridge_net_server_create(port) }
@@ -44,8 +38,6 @@ public func netServerClose(handle: Int64): Unit {
     unsafe { bridge_net_server_close(handle) }
 }
 
-// --- TCP Client ---
-
 public func netClientConnect(host: String, port: Int32): Int64 {
     let cstr = unsafe { LibC.mallocCString(host) }
     let handle = unsafe { bridge_net_client_connect(cstr, port) }
@@ -56,8 +48,6 @@ public func netClientConnect(host: String, port: Int32): Int64 {
 public func netIsConnected(handle: Int64): Bool {
     unsafe { bridge_net_is_connected(handle) }
 }
-
-// --- Data Transfer ---
 
 public func netSend(handle: Int64, data: String): Int32 {
     let cstr = unsafe { LibC.mallocCString(data) }
@@ -78,8 +68,6 @@ public func netRecv(handle: Int64): String {
         ""
     }
 }
-
-// --- UDP ---
 
 public func netUdpCreate(port: Int32): Int64 {
     unsafe { bridge_net_udp_create(port) }
@@ -113,8 +101,6 @@ public func netUdpRecv(handle: Int64): (String, String, Int32) {
 public func netUdpClose(handle: Int64): Unit {
     unsafe { bridge_net_udp_close(handle) }
 }
-
-// --- Generic ---
 
 public func netClose(handle: Int64): Unit {
     unsafe { bridge_net_close(handle) }
