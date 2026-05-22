@@ -7,6 +7,11 @@ public class CardGameUI {
     private var window: Window
     private var engine: CardGameEngine
 
+    //Mode Select
+    private var modeTitle: Label
+    private var modeBtnAI: Button
+    private var modeBtn2P: Button
+
     //Character Select
     private var selectTitle: Label
     private var classBtns: ArrayList<Button>
@@ -106,6 +111,24 @@ public class CardGameUI {
         window = Window("Card Game — 卡牌对战", Int32(WIN_W), Int32(WIN_H))
         window.setBackgroundColor(c.bgSecondary)
         window.setMinSize(Int32(WIN_W), Int32(WIN_H))
+
+        //MODE SCREEN
+        modeTitle = Label("选择游戏模式",
+            Position.abs(WIN_W / Float32(2), Float32(80)), c.accent,
+            "Microsoft YaHei", Float32(24), SizeScale.fixed(), Anchor.Center)
+        window.addWidget(modeTitle)
+
+        modeBtnAI = Button("单人 vs AI",
+            Position.abs(WIN_W / Float32(2) - Float32(170), Float32(180)), Float32(240), Float32(60),
+            "Microsoft YaHei", Float32(16), SizeScale.fixed(), Anchor.Center,
+            ButtonStyle.outlined(), { => () })
+        window.addWidget(modeBtnAI)
+
+        modeBtn2P = Button("双人对战",
+            Position.abs(WIN_W / Float32(2) + Float32(170), Float32(180)), Float32(240), Float32(60),
+            "Microsoft YaHei", Float32(16), SizeScale.fixed(), Anchor.Center,
+            ButtonStyle.outlined(), { => () })
+        window.addWidget(modeBtn2P)
 
         //SELECT SCREEN
         selectTitle = Label("选择你的角色",
@@ -273,10 +296,12 @@ public class CardGameUI {
 
         //WIRE
         wireCallbacks()
-        showSelectScreen()
+        showModeScreen()
     }
 
     private func wireCallbacks(): Unit {
+        modeBtnAI.onClick() { onModePick(false) }
+        modeBtn2P.onClick() { onModePick(true) }
         let classes = getAllClasses()
         var cIdx: Int32 = 0
         for (cd in classes) {
@@ -291,6 +316,46 @@ public class CardGameUI {
         }
         actionBtn.onClick() { onAction() }
         playerSkillBtn.onClick() { onSkillToggle() }
+    }
+
+    //Mode Screen
+    private func showModeScreen(): Unit {
+        modeTitle.setPosition(Position.abs(WIN_W / Float32(2), Float32(80)))
+        modeBtnAI.setText("单人 vs AI")
+        modeBtnAI.setPosition(Position.abs(WIN_W / Float32(2) - Float32(170), Float32(180)))
+        modeBtnAI.setStyle(ButtonStyle.outlined())
+        modeBtn2P.setText("双人对战")
+        modeBtn2P.setPosition(Position.abs(WIN_W / Float32(2) + Float32(170), Float32(180)))
+        modeBtn2P.setStyle(ButtonStyle.outlined())
+
+        selectTitle.setPosition(Position.abs(OFF, OFF))
+        selectInfoLabel.setPosition(Position.abs(OFF, OFF))
+        for (btn in classBtns) {
+            btn.setText("")
+            btn.setPosition(Position.abs(OFF, OFF))
+        }
+        hideAllBattleWidgets()
+    }
+
+    private func hideModeScreen(): Unit {
+        modeTitle.setPosition(Position.abs(OFF, OFF))
+        modeBtnAI.setText("")
+        modeBtnAI.setPosition(Position.abs(OFF, OFF))
+        modeBtn2P.setText("")
+        modeBtn2P.setPosition(Position.abs(OFF, OFF))
+    }
+
+    private func onModePick(isTwoPlayer: Bool): Unit {
+        hideModeScreen()
+        if (isTwoPlayer) {
+            engine.selectMode(GameMode.VS_PLAYER)
+            selectTitle.setText("玩家1 — 选择角色")
+        } else {
+            engine.selectMode(GameMode.VS_AI)
+            selectTitle.setText("选择你的角色")
+        }
+        selectInfoLabel.setPosition(Position.abs(WIN_W / Float32(2), Float32(85)))
+        showSelectScreen()
     }
 
     //Screen Toggle
@@ -399,9 +464,23 @@ public class CardGameUI {
 
     //Handlers
     private func onClassPicked(cd: CharData): Unit {
-        engine.selectPlayerClass(cd)
-        showBattleScreen()
-        refreshUI()
+        match (engine.phase) {
+            case GamePhase.SELECT_CHARACTER =>
+                engine.selectPlayerClass(cd)
+                if (engine.gameMode == GameMode.VS_PLAYER) {
+                    // P2 still needs to pick
+                    selectTitle.setText("玩家2 — 选择角色")
+                    showSelectScreen()
+                } else {
+                    showBattleScreen()
+                    refreshUI()
+                }
+            case GamePhase.SELECT_CHARACTER_P2 =>
+                engine.selectP2Class(cd)
+                showBattleScreen()
+                refreshUI()
+            case _ => ()
+        }
     }
 
     private func onSkillToggle(): Unit {
@@ -412,14 +491,15 @@ public class CardGameUI {
     }
 
     private func onDiceClick(index: Int32): Unit {
-        if (index >= engine.player.data.dicenum) { return }
+        let diceOwner = engine.activeDiceOwner()
+        if (index >= diceOwner.data.dicenum) { return }
         match (engine.phase) {
             case GamePhase.PLAYER_ATTACK =>
-                engine.player.cycleDiceMode(index)
+                diceOwner.cycleDiceMode(index)
                 refreshDiceDisplay()
                 refreshSelectionInfo()
             case GamePhase.PLAYER_DEFEND =>
-                engine.player.cycleDiceMode(index)
+                diceOwner.cycleDiceMode(index)
                 refreshDiceDisplay()
                 refreshSelectionInfo()
             case _ => ()
@@ -440,16 +520,16 @@ public class CardGameUI {
                     return
                 }
                 engine.playerAttack()
-                match (engine.phase) {
-                    case GamePhase.AI_TURN => engine.aiAttack()
-                    case _ => ()
+                if (engine.gameMode == GameMode.VS_AI && engine.phase == GamePhase.AI_TURN) {
+                    engine.aiAttack()
                 }
                 refreshUI()
 
             case GamePhase.PLAYER_DEFEND =>
-                let need = engine.player.data.DMGnum
-                if (engine.player.getTotalCount() != need) {
-                    engine.log("请分配 ${need} 个骰子到物防/法防! (已分配: ${engine.player.getTotalCount()})")
+                let diceOwner = engine.activeDiceOwner()
+                let need = diceOwner.data.DMGnum
+                if (diceOwner.getTotalCount() != need) {
+                    engine.log("请分配 ${need} 个骰子到物防/法防! (已分配: ${diceOwner.getTotalCount()})")
                     refreshMessageLog()
                     return
                 }
@@ -462,7 +542,7 @@ public class CardGameUI {
 
             case GamePhase.GAME_OVER =>
                 engine = CardGameEngine()
-                showSelectScreen()
+                showModeScreen()
 
             case _ => ()
         }
@@ -484,22 +564,26 @@ public class CardGameUI {
     }
 
     private func refreshHPBars(): Unit {
-        aiHpBar.setValue(Float32(engine.ai.hp))
-        aiHpLabel.setText("${engine.ai.hp}/${engine.ai.data.maxHP}")
-        playerHpBar.setValue(Float32(engine.player.hp))
-        playerHpLabel.setText("${engine.player.hp}/${engine.player.data.maxHP}")
+        let bottom = engine.activeDiceOwner()
+        let top = engine.topChar()
+        aiHpBar.setValue(Float32(top.hp))
+        aiHpLabel.setText("${top.hp}/${top.data.maxHP}")
+        playerHpBar.setValue(Float32(bottom.hp))
+        playerHpLabel.setText("${bottom.hp}/${bottom.data.maxHP}")
     }
 
     private func refreshSkillBars(): Unit {
-        aiSpBar.setValue(Float32(engine.ai.skillPoints))
-        aiSpLabel.setText("SP:${engine.ai.skillPoints}/${engine.ai.data.activeSkillCost}")
-        let aiFull = engine.ai.skillPoints >= engine.ai.data.activeSkillCost
-        aiSpBar.setStyle(if (aiFull) { spFullStyle } else { spNormStyle })
-        aiSkillNameLabel.setText(if (aiFull) { getSkillName(engine.ai.data.id) } else { "" })
+        let bottom = engine.activeDiceOwner()
+        let top = engine.topChar()
+        aiSpBar.setValue(Float32(top.skillPoints))
+        aiSpLabel.setText("SP:${top.skillPoints}/${top.data.activeSkillCost}")
+        let topFull = top.skillPoints >= top.data.activeSkillCost
+        aiSpBar.setStyle(if (topFull) { spFullStyle } else { spNormStyle })
+        aiSkillNameLabel.setText(if (topFull) { getSkillName(top.data.id) } else { "" })
 
-        playerSpBar.setValue(Float32(engine.player.skillPoints))
-        playerSpLabel.setText("SP:${engine.player.skillPoints}/${engine.player.data.activeSkillCost}")
-        let plFull = engine.player.skillPoints >= engine.player.data.activeSkillCost
+        playerSpBar.setValue(Float32(bottom.skillPoints))
+        playerSpLabel.setText("SP:${bottom.skillPoints}/${bottom.data.activeSkillCost}")
+        let plFull = bottom.skillPoints >= bottom.data.activeSkillCost
         playerSpBar.setStyle(if (plFull) { spFullStyle } else { spNormStyle })
     }
 
@@ -537,13 +621,33 @@ public class CardGameUI {
     }
 
     private func refreshNameLabels(): Unit {
-        aiNameLabel.setText("AI: ${engine.ai.data.name} (物防${engine.ai.data.physicalDefense} 法防${engine.ai.data.magicalDefense})")
-        playerNameLabel.setText("你: ${engine.player.data.name} (物防${engine.player.data.physicalDefense} 法防${engine.player.data.magicalDefense})")
+        let bottom = engine.activeDiceOwner()
+        let top = engine.topChar()
+        if (engine.gameMode == GameMode.VS_PLAYER) {
+            let isP1Att = engine.halfTurnCount % 2 == 0
+            var bottomName: String = ""
+            var topName: String = ""
+            if (engine.phase == GamePhase.PLAYER_DEFEND) {
+                // defend phase: bottom=defender, top=attacker
+                bottomName = if (isP1Att) { "玩家2" } else { "玩家1" }
+                topName = if (isP1Att) { "玩家1" } else { "玩家2" }
+            } else {
+                bottomName = if (isP1Att) { "玩家1" } else { "玩家2" }
+                topName = if (isP1Att) { "玩家2" } else { "玩家1" }
+            }
+            playerNameLabel.setText("${bottomName}: ${bottom.data.name} (物防${bottom.data.physicalDefense} 法防${bottom.data.magicalDefense})")
+            aiNameLabel.setText("${topName}: ${top.data.name} (物防${top.data.physicalDefense} 法防${top.data.magicalDefense})")
+        } else {
+            aiNameLabel.setText("AI: ${top.data.name} (物防${top.data.physicalDefense} 法防${top.data.magicalDefense})")
+            playerNameLabel.setText("你: ${bottom.data.name} (物防${bottom.data.physicalDefense} 法防${bottom.data.magicalDefense})")
+        }
     }
 
     private func refreshShieldLabels(): Unit {
-        aiShieldLabel.setText("盾:${engine.ai.shields}")
-        playerShieldLabel.setText("盾:${engine.player.shields}")
+        let bottom = engine.activeDiceOwner()
+        let top = engine.topChar()
+        aiShieldLabel.setText("盾:${top.shields}")
+        playerShieldLabel.setText("盾:${bottom.shields}")
     }
 
     private func refreshDiceDisplay(): Unit {
@@ -552,7 +656,8 @@ public class CardGameUI {
             case GamePhase.PLAYER_DEFEND => true
             case _ => false
         }
-        let totalDice = engine.player.data.dicenum
+        let diceOwner = engine.activeDiceOwner()
+        let totalDice = diceOwner.data.dicenum
         let diceSize: Float32 = Float32(42)
         let diceSpacing: Float32 = Float32(6)
         let totalW = Float32(totalDice) * diceSize + Float32(totalDice - 1) * diceSpacing
@@ -564,9 +669,9 @@ public class CardGameUI {
             if (idx < totalDice) {
                 let dx = startX + Float32(idx) * (diceSize + diceSpacing)
                 btn.setPosition(Position.abs(dx, Y_DICE))
-                let val = engine.player.getDice(idx)
-                let isPhys = engine.player.isPhysDice(idx)
-                let isMag = engine.player.isMagDice(idx)
+                let val = diceOwner.getDice(idx)
+                let isPhys = diceOwner.isPhysDice(idx)
+                let isMag = diceOwner.isMagDice(idx)
                 if (clickable && isPhys) {
                     btn.setText("${val}")
                     btn.setStyle(physDiceStyle)
@@ -585,11 +690,12 @@ public class CardGameUI {
     }
 
     private func refreshSelectionInfo(): Unit {
+        let diceOwner = engine.activeDiceOwner()
         match (engine.phase) {
             case GamePhase.PLAYER_ATTACK =>
-                selectionInfoLabel.setText("物攻骰:${engine.player.getPhysCount()}/${engine.player.data.ATKnum} 合计:${engine.player.getPhysSum()} | 法攻骰:${engine.player.getMagCount()}/${engine.player.data.ATKnum} 合计:${engine.player.getMagSum()} | 需选${engine.player.data.ATKnum}个")
+                selectionInfoLabel.setText("物攻骰:${diceOwner.getPhysCount()}/${diceOwner.data.ATKnum} 合计:${diceOwner.getPhysSum()} | 法攻骰:${diceOwner.getMagCount()}/${diceOwner.data.ATKnum} 合计:${diceOwner.getMagSum()} | 需选${diceOwner.data.ATKnum}个")
             case GamePhase.PLAYER_DEFEND =>
-                selectionInfoLabel.setText("物防骰:${engine.player.getPhysCount()}/${engine.player.data.DMGnum} 合计:${engine.player.getPhysSum()} | 法防骰:${engine.player.getMagCount()}/${engine.player.data.DMGnum} 合计:${engine.player.getMagSum()} | 需选${engine.player.data.DMGnum}个")
+                selectionInfoLabel.setText("物防骰:${diceOwner.getPhysCount()}/${diceOwner.data.DMGnum} 合计:${diceOwner.getPhysSum()} | 法防骰:${diceOwner.getMagCount()}/${diceOwner.data.DMGnum} 合计:${diceOwner.getMagSum()} | 需选${diceOwner.data.DMGnum}个")
             case _ => selectionInfoLabel.setText("")
         }
     }
@@ -606,10 +712,22 @@ public class CardGameUI {
     }
 
     private func refreshPhaseLabel(): Unit {
+        let who = if (engine.gameMode == GameMode.VS_PLAYER) {
+            if (engine.phase == GamePhase.PLAYER_DEFEND) {
+                // 防守阶段显示防守方
+                if (engine.halfTurnCount % 2 == 0) { "玩家2" } else { "玩家1" }
+            } else {
+                // 攻击阶段显示攻击方
+                if (engine.halfTurnCount % 2 == 0) { "玩家1" } else { "玩家2" }
+            }
+        } else {
+            "你"
+        }
+        let diceOwner = engine.activeDiceOwner()
         match (engine.phase) {
-            case GamePhase.PLAYER_ROLL => phaseLabel.setText("你的回合 — 请掷骰子")
-            case GamePhase.PLAYER_ATTACK => phaseLabel.setText("分配 ${engine.player.data.ATKnum} 个骰子到物攻/法攻")
-            case GamePhase.PLAYER_DEFEND => phaseLabel.setText("AI 攻击! 分配 ${engine.player.data.DMGnum} 个骰子到物防/法防")
+            case GamePhase.PLAYER_ROLL => phaseLabel.setText("${who}的回合 — 请掷骰子")
+            case GamePhase.PLAYER_ATTACK => phaseLabel.setText("${who} — 分配 ${diceOwner.data.ATKnum} 个骰子到物攻/法攻")
+            case GamePhase.PLAYER_DEFEND => phaseLabel.setText("${who} — 分配 ${diceOwner.data.DMGnum} 个骰子到物防/法防")
             case GamePhase.ROUND_RESULT => phaseLabel.setText(if (engine.isGameOver()) { engine.getWinner() } else { "回合结束 — 点击进入下一回合" })
             case GamePhase.GAME_OVER => phaseLabel.setText(engine.getWinner())
             case _ => ()

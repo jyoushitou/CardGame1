@@ -339,14 +339,42 @@ public class Character {
     }
 }
 
+public enum GameMode {
+    | VS_AI
+    | VS_PLAYER
+
+    public operator func ==(right: GameMode): Bool {
+        match (this) {
+            case VS_AI => match (right) { case VS_AI => true; case _ => false }
+            case VS_PLAYER => match (right) { case VS_PLAYER => true; case _ => false }
+        }
+    }
+}
+
 public enum GamePhase {
+    | SELECT_MODE
     | SELECT_CHARACTER
+    | SELECT_CHARACTER_P2
     | PLAYER_ROLL
     | PLAYER_ATTACK
     | AI_TURN
     | PLAYER_DEFEND
     | ROUND_RESULT
     | GAME_OVER
+
+    public operator func ==(right: GamePhase): Bool {
+        match (this) {
+            case SELECT_MODE => match (right) { case SELECT_MODE => true; case _ => false }
+            case SELECT_CHARACTER => match (right) { case SELECT_CHARACTER => true; case _ => false }
+            case SELECT_CHARACTER_P2 => match (right) { case SELECT_CHARACTER_P2 => true; case _ => false }
+            case PLAYER_ROLL => match (right) { case PLAYER_ROLL => true; case _ => false }
+            case PLAYER_ATTACK => match (right) { case PLAYER_ATTACK => true; case _ => false }
+            case AI_TURN => match (right) { case AI_TURN => true; case _ => false }
+            case PLAYER_DEFEND => match (right) { case PLAYER_DEFEND => true; case _ => false }
+            case ROUND_RESULT => match (right) { case ROUND_RESULT => true; case _ => false }
+            case GAME_OVER => match (right) { case GAME_OVER => true; case _ => false }
+        }
+    }
 }
 
 public class CardGameEngine {
@@ -357,6 +385,8 @@ public class CardGameEngine {
     public var messages: ArrayList<String>
     public var lastAIPhysAtk: Int32
     public var lastAIMagAtk: Int32
+    public var gameMode: GameMode
+    public var halfTurnCount: Int32
     public var playerSkillStacks: Int32
     public var aiDebuff: Float32
     public var aiSkillPhysPen: Float32
@@ -368,7 +398,9 @@ public class CardGameEngine {
     public init() {
         player = Character(getAllClasses()[0])
         ai = Character(getAllClasses()[0])
-        phase = GamePhase.SELECT_CHARACTER
+        gameMode = GameMode.VS_AI
+        phase = GamePhase.SELECT_MODE
+        halfTurnCount = 0
         rng = Rng()
         messages = ArrayList<String>()
         lastAIPhysAtk = 0
@@ -382,15 +414,51 @@ public class CardGameEngine {
         playerCounter = Float32(0)
     }
 
+    public func selectMode(mode: GameMode): Unit {
+        gameMode = mode
+        if (mode == GameMode.VS_AI) {
+            phase = GamePhase.SELECT_CHARACTER
+        } else {
+            phase = GamePhase.SELECT_CHARACTER
+        }
+    }
+
     public func selectPlayerClass(charData: CharData): Unit {
         player = Character(charData)
-        log("你选择了: ${charData.name} — ${charData.desc}")
-        let allClasses = getAllClasses()
-        let aiIdx = rng.nextInt(Int32(allClasses.size))
-        let idx = aiIdx - 1
-        ai = Character(allClasses[Int64(idx)])
-        log("AI选择了: ${ai.data.name} — ${ai.data.desc}")
+        if (gameMode == GameMode.VS_AI) {
+            log("你选择了: ${charData.name} — ${charData.desc}")
+            let allClasses = getAllClasses()
+            let aiIdx = rng.nextInt(Int32(allClasses.size))
+            let idx = aiIdx - 1
+            ai = Character(allClasses[Int64(idx)])
+            log("AI选择了: ${ai.data.name} — ${ai.data.desc}")
+            phase = GamePhase.PLAYER_ROLL
+        } else {
+            log("玩家1选择了: ${charData.name} — ${charData.desc}")
+            phase = GamePhase.SELECT_CHARACTER_P2
+        }
+    }
+
+    public func selectP2Class(charData: CharData): Unit {
+        ai = Character(charData)
+        log("玩家2选择了: ${charData.name} — ${charData.desc}")
+        halfTurnCount = 0
         phase = GamePhase.PLAYER_ROLL
+    }
+
+    public func swapPlayers(): Unit {
+        let temp = player
+        player = ai
+        ai = temp
+        log("--- 交换回合 ---")
+    }
+
+    public func currentPlayerName(): String {
+        if (gameMode == GameMode.VS_AI) {
+            "你"
+        } else {
+            if (halfTurnCount % 2 == 0) { "玩家1" } else { "玩家2" }
+        }
     }
 
     public func log(msg: String): Unit {
@@ -536,7 +604,30 @@ public class CardGameEngine {
             ai.addSkillPoints(totalRaw)
             playerVuln = Float32(1)
             playerCounter = Float32(0)
-            phase = GamePhase.AI_TURN
+            phase = if (gameMode == GameMode.VS_AI) { GamePhase.AI_TURN } else { GamePhase.PLAYER_DEFEND }
+            return 0
+        }
+
+        // 2P: apply effects, store info, defender will respond
+        if (gameMode == GameMode.VS_PLAYER) {
+            if (skillLifesteal > Float32(0)) {
+                let heal = Int32(Float32(totalRaw) * skillLifesteal)
+                player.hp = min2(player.data.maxHP, player.hp + heal)
+                log("灵魂收割: 吸血回复 ${heal} HP")
+            }
+            if (skillHealPct > Float32(0)) {
+                let heal = Int32(Float32(player.data.maxHP) * skillHealPct)
+                player.hp = min2(player.data.maxHP, player.hp + heal)
+                log("回复 ${heal} HP")
+            }
+            lastAIPhysAtk = physAtk
+            lastAIMagAtk = magAtk
+            aiSkillPhysPen = skillPhysPen
+            aiSkillMagPen = skillMagPen
+            aiSkillIgnoreDice = skillIgnoreDice
+            ai.rollDice(rng)
+            log("${ai.data.name} 请选择 ${ai.data.DMGnum} 个防御骰子")
+            phase = GamePhase.PLAYER_DEFEND
             return 0
         }
 
@@ -582,7 +673,7 @@ public class CardGameEngine {
         player.addSkillPoints(totalRaw * 2)
         ai.addSkillPoints(totalRaw)
 
-        phase = GamePhase.AI_TURN
+        phase = if (gameMode == GameMode.VS_AI) { GamePhase.AI_TURN } else { GamePhase.PLAYER_DEFEND }
         totalDmg
     }
 
@@ -696,14 +787,17 @@ public class CardGameEngine {
     }
 
     public func playerDefend(): Int32 {
-        var physDef = player.getPhysSum()
-        var magDef = player.getMagSum()
+        // In 2P mode, ai is the defender (player is the attacker). In AI mode, player is the defender.
+        let defender = if (gameMode == GameMode.VS_PLAYER) { ai } else { player }
+        let attacker = if (gameMode == GameMode.VS_PLAYER) { player } else { ai }
 
-        // Apply AI skill penetration / ignore dice
+        var physDef = defender.getPhysSum()
+        var magDef = defender.getMagSum()
+
         if (aiSkillIgnoreDice) {
             physDef = 0
             magDef = 0
-            log("AI元素过载: 无视玩家防御骰!")
+            log("元素过载: 无视防御骰!")
             aiSkillIgnoreDice = false
         } else {
             physDef = Int32(Float32(physDef) * (Float32(1) - aiSkillPhysPen))
@@ -711,12 +805,11 @@ public class CardGameEngine {
             aiSkillPhysPen = Float32(0)
             aiSkillMagPen = Float32(0)
         }
-        log("玩家物防骰: ${physDef}(${player.getPhysCount()}个), 法防骰: ${magDef}(${player.getMagCount()}个)")
+        log("${defender.data.name}物防骰: ${physDef}(${defender.getPhysCount()}个), 法防骰: ${magDef}(${defender.getMagCount()}个)")
 
-        var physDmg = Int32(Float32(max2(0, lastAIPhysAtk - physDef)) * (Float32(1) - player.data.physicalDefense))
-        var magDmg = Int32(Float32(max2(0, lastAIMagAtk - magDef)) * (Float32(1) - player.data.magicalDefense))
+        var physDmg = Int32(Float32(max2(0, lastAIPhysAtk - physDef)) * (Float32(1) - defender.data.physicalDefense))
+        var magDmg = Int32(Float32(max2(0, lastAIMagAtk - magDef)) * (Float32(1) - defender.data.magicalDefense))
 
-        // Apply vuln from player's own skill (狂战, 盾卫)
         if (playerVuln != Float32(1)) {
             physDmg = Int32(Float32(physDmg) * playerVuln)
             magDmg = Int32(Float32(magDmg) * playerVuln)
@@ -730,22 +823,50 @@ public class CardGameEngine {
 
         var totalDmg = physDmg + magDmg
 
-        // Counter damage (盾卫)
         if (playerCounter > Float32(0)) {
             let counterDmg = Int32(Float32(totalDmg) * playerCounter)
-            ai.hp = max2(0, ai.hp - counterDmg)
-            log("坚盾反击! AI受到 ${counterDmg} 反弹伤害")
+            attacker.hp = max2(0, attacker.hp - counterDmg)
+            log("坚盾反击! ${attacker.data.name}受到 ${counterDmg} 反弹伤害")
             playerCounter = Float32(0)
         }
 
-        player.hp = max2(0, player.hp - totalDmg)
-        log("你受到 物伤:${physDmg} + 法伤:${magDmg} = ${totalDmg} 伤害, 剩余HP: ${player.hp}/${player.data.maxHP}")
+        defender.hp = max2(0, defender.hp - totalDmg)
+        log("${defender.data.name}受到 物伤:${physDmg} + 法伤:${magDmg} = ${totalDmg} 伤害, 剩余HP: ${defender.hp}/${defender.data.maxHP}")
 
-        player.addSkillPoints(lastAIPhysAtk + lastAIMagAtk)
-        ai.addSkillPoints((lastAIPhysAtk + lastAIMagAtk) * 2)
+        defender.addSkillPoints(lastAIPhysAtk + lastAIMagAtk)
+        attacker.addSkillPoints((lastAIPhysAtk + lastAIMagAtk) * 2)
 
-        phase = GamePhase.ROUND_RESULT
+        if (gameMode == GameMode.VS_PLAYER) {
+            halfTurnCount = halfTurnCount + 1
+            swapPlayers()
+            if (halfTurnCount >= 2) {
+                halfTurnCount = 0
+                phase = GamePhase.ROUND_RESULT
+            } else {
+                phase = GamePhase.PLAYER_ROLL
+            }
+        } else {
+            phase = GamePhase.ROUND_RESULT
+        }
         totalDmg
+    }
+
+    // Get the character whose dice to show in the UI (bottom area)
+    public func activeDiceOwner(): Character {
+        if (gameMode == GameMode.VS_PLAYER && phase == GamePhase.PLAYER_DEFEND) {
+            ai  // defender needs to select defense dice
+        } else {
+            player
+        }
+    }
+
+    // Get the opponent character (top area)
+    public func topChar(): Character {
+        if (gameMode == GameMode.VS_PLAYER && phase == GamePhase.PLAYER_DEFEND) {
+            player
+        } else {
+            ai
+        }
     }
 
     public func startNewRound(): Unit {
@@ -761,8 +882,8 @@ public class CardGameEngine {
     }
 
     public func getWinner(): String {
-        if (ai.hp <= 0) { "玩家胜利!" }
-        else if (player.hp <= 0) { "AI胜利!" }
+        if (ai.hp <= 0) { "${player.data.name} 胜利!" }
+        else if (player.hp <= 0) { "${ai.data.name} 胜利!" }
         else { "" }
     }
 
