@@ -17,6 +17,15 @@ public class CardGameUI {
     private var classBtns: ArrayList<Button>
     private var selectInfoLabel: Label
 
+    //Race Select
+    private var raceTitle: Label
+    private var raceBtns: ArrayList<Button>
+    private var raceInfoLabel: Label
+
+    //Class Detail Popup
+    private var detailVisible: Bool
+    private var detailLabel: Label
+
     //Battle: AI
     private var aiNameLabel: Label
     private var aiHpBar: ProgressBar
@@ -60,7 +69,7 @@ public class CardGameUI {
     private let WIN_W: Float32 = Float32(800)
     private let WIN_H: Float32 = Float32(640)
     private let OFF: Float32 = Float32(-5000)
-    private let MAX_DICE: Int32 = 6
+    private let MAX_DICE: Int32 = 9
 
     //Y positions
     private let Y_AI_NAME: Float32 = Float32(20)
@@ -95,7 +104,9 @@ public class CardGameUI {
     public init() {
         engine = CardGameEngine()
         classBtns = ArrayList<Button>()
+        raceBtns = ArrayList<Button>()
         diceButtons = ArrayList<Button>()
+        detailVisible = false
 
         physDiceStyle = ButtonStyle.fromTheme()
         magDiceStyle = ButtonStyle(6.0, false, 1.0,
@@ -141,6 +152,11 @@ public class CardGameUI {
             "Microsoft YaHei", Float32(12), SizeScale.fixed(), Anchor.Center)
         window.addWidget(selectInfoLabel)
 
+        // Class detail popup (right-click shows as overlay)
+        detailLabel = Label("",
+            Position.abs(OFF, OFF), c.textPrimary,
+            "Microsoft YaHei", Float32(12), SizeScale.fixed(), Anchor.TopLeft)
+
         //2 columns x 4 rows
         let classes = getAllClasses()
         let btnW: Float32 = Float32(330)
@@ -164,6 +180,41 @@ public class CardGameUI {
             window.addWidget(btn)
             classBtns.add(btn)
             idx = idx + 1
+        }
+
+        //RACE SELECT SCREEN
+        raceTitle = Label("选择你的种族",
+            Position.abs(WIN_W / Float32(2), Float32(50)), c.accent,
+            "Microsoft YaHei", Float32(22), SizeScale.fixed(), Anchor.Center)
+        window.addWidget(raceTitle)
+
+        raceInfoLabel = Label("种族提供独特机制和每回合成长。数值加成较小，特性极强。",
+            Position.abs(WIN_W / Float32(2), Float32(85)), c.textSecondary,
+            "Microsoft YaHei", Float32(12), SizeScale.fixed(), Anchor.Center)
+        window.addWidget(raceInfoLabel)
+
+        let races = getAllRaces()
+        let raceBtnW: Float32 = Float32(360)
+        let raceBtnH: Float32 = Float32(72)
+        let raceGapX: Float32 = Float32(18)
+        let raceGapY: Float32 = Float32(10)
+        let raceTotalW = Float32(2) * raceBtnW + raceGapX
+        let raceRow1X = (WIN_W - raceTotalW) / Float32(2) + raceBtnW / Float32(2)
+
+        var rIdx: Int32 = 0
+        for (rd in races) {
+            let col = rIdx % 2
+            let row = rIdx / 2
+            let x = raceRow1X + Float32(col) * (raceBtnW + raceGapX)
+            let y = Float32(140) + Float32(row) * (raceBtnH + raceGapY)
+            let rlabel = "${rd.name}\n${rd.desc}"
+            let btn = Button(rlabel,
+                Position.abs(x, y), raceBtnW, raceBtnH,
+                "Microsoft YaHei", Float32(12), SizeScale.fixed(), Anchor.Center,
+                ButtonStyle.outlined(), { => () })
+            window.addWidget(btn)
+            raceBtns.add(btn)
+            rIdx = rIdx + 1
         }
 
         //BATTLE: AI SECTION
@@ -307,8 +358,17 @@ public class CardGameUI {
         for (cd in classes) {
             if (cIdx < Int32(classBtns.size)) {
                 classBtns[Int64(cIdx)].onClick() { onClassPicked(cd) }
+                classBtns[Int64(cIdx)].onRightClick() { onClassRightClick(cd) }
             }
             cIdx = cIdx + 1
+        }
+        let races = getAllRaces()
+        var rIdx2: Int32 = 0
+        for (rd in races) {
+            if (rIdx2 < Int32(raceBtns.size)) {
+                raceBtns[Int64(rIdx2)].onClick() { onRacePicked(rd) }
+            }
+            rIdx2 = rIdx2 + 1
         }
         for (i in 0..diceButtons.size) {
             let di = Int32(i)
@@ -387,15 +447,56 @@ public class CardGameUI {
         }
 
         hideAllBattleWidgets()
+        hideRaceScreen()
+    }
+
+    private func showRaceScreen(): Unit {
+        hideClassDetail()
+        raceTitle.setPosition(Position.abs(WIN_W / Float32(2), Float32(50)))
+        raceInfoLabel.setPosition(Position.abs(WIN_W / Float32(2), Float32(85)))
+
+        let races = getAllRaces()
+        let raceBtnW: Float32 = Float32(360)
+        let raceBtnH: Float32 = Float32(72)
+        let raceGapX: Float32 = Float32(18)
+        let raceGapY: Float32 = Float32(10)
+        let raceTotalW = Float32(2) * raceBtnW + raceGapX
+        let raceRow1X = (WIN_W - raceTotalW) / Float32(2) + raceBtnW / Float32(2)
+
+        var rIdx: Int32 = 0
+        for (rd in races) {
+            if (rIdx < Int32(raceBtns.size)) {
+                let col = rIdx % 2
+                let row = rIdx / 2
+                let x = raceRow1X + Float32(col) * (raceBtnW + raceGapX)
+                let y = Float32(140) + Float32(row) * (raceBtnH + raceGapY)
+                let btn = raceBtns[Int64(rIdx)]
+                btn.setText("${rd.name}\n${rd.desc}")
+                btn.setPosition(Position.abs(x, y))
+                btn.setStyle(ButtonStyle.outlined())
+            }
+            rIdx = rIdx + 1
+        }
+    }
+
+    private func hideRaceScreen(): Unit {
+        raceTitle.setPosition(Position.abs(OFF, OFF))
+        raceInfoLabel.setPosition(Position.abs(OFF, OFF))
+        for (btn in raceBtns) {
+            btn.setText("")
+            btn.setPosition(Position.abs(OFF, OFF))
+        }
     }
 
     private func showBattleScreen(): Unit {
+        hideClassDetail()
         selectTitle.setPosition(Position.abs(OFF, OFF))
         selectInfoLabel.setPosition(Position.abs(OFF, OFF))
         for (btn in classBtns) {
             btn.setText("")
             btn.setPosition(Position.abs(OFF, OFF))
         }
+        hideRaceScreen()
 
         aiNameLabel.setPosition(Position.abs(MG, Y_AI_NAME))
         aiHpBar.setLayoutFrame(LayoutFrame(MG + X_HPBAR, Y_AI_HPROW, W_HPBAR, Float32(20)))
@@ -460,23 +561,79 @@ public class CardGameUI {
         playerSpLabel.setPosition(Position.abs(OFF, OFF))
         playerSkillBtn.setPosition(Position.abs(OFF, OFF))
         playerSkillBtn.setText("")
+
+        hideRaceScreen()
     }
 
     //Handlers
+    private func onClassRightClick(cd: CharData): Unit {
+        if (detailVisible) {
+            hideClassDetail()
+        } else {
+            showClassDetail(cd)
+        }
+    }
+
+    private func showClassDetail(cd: CharData): Unit {
+        let detailText = getClassDetail(cd)
+        detailLabel.setText(detailText)
+        // Create a popover to float on top with background
+        let popover = Popover(detailLabel, WIN_W / Float32(2), Float32(400), Float32(520), Float32(200),
+            PopoverStyle.fromTheme())
+        window.showOverlay(popover)
+        detailVisible = true
+    }
+
+    private func hideClassDetail(): Unit {
+        window.dismissOverlay()
+        detailVisible = false
+    }
+
     private func onClassPicked(cd: CharData): Unit {
         match (engine.phase) {
             case GamePhase.SELECT_CHARACTER =>
                 engine.selectPlayerClass(cd)
                 if (engine.gameMode == GameMode.VS_PLAYER) {
-                    // P2 still needs to pick
+                    selectTitle.setText("玩家1 — 选择角色")
+                }
+                raceTitle.setText("玩家1 — 选择种族")
+                selectTitle.setPosition(Position.abs(OFF, OFF))
+                selectInfoLabel.setPosition(Position.abs(OFF, OFF))
+                for (b in classBtns) {
+                    b.setText("")
+                    b.setPosition(Position.abs(OFF, OFF))
+                }
+                showRaceScreen()
+            case GamePhase.SELECT_CHARACTER_P2 =>
+                engine.selectP2Class(cd)
+                raceTitle.setText("玩家2 — 选择种族")
+                selectTitle.setPosition(Position.abs(OFF, OFF))
+                selectInfoLabel.setPosition(Position.abs(OFF, OFF))
+                for (b in classBtns) {
+                    b.setText("")
+                    b.setPosition(Position.abs(OFF, OFF))
+                }
+                showRaceScreen()
+            case _ => ()
+        }
+    }
+
+    private func onRacePicked(rd: RaceData): Unit {
+        match (engine.phase) {
+            case GamePhase.SELECT_RACE =>
+                engine.selectPlayerRace(rd)
+                if (engine.gameMode == GameMode.VS_PLAYER) {
                     selectTitle.setText("玩家2 — 选择角色")
+                    hideRaceScreen()
                     showSelectScreen()
                 } else {
+                    hideRaceScreen()
                     showBattleScreen()
                     refreshUI()
                 }
-            case GamePhase.SELECT_CHARACTER_P2 =>
-                engine.selectP2Class(cd)
+            case GamePhase.SELECT_RACE_P2 =>
+                engine.selectP2Race(rd)
+                hideRaceScreen()
                 showBattleScreen()
                 refreshUI()
             case _ => ()
@@ -492,7 +649,7 @@ public class CardGameUI {
 
     private func onDiceClick(index: Int32): Unit {
         let diceOwner = engine.activeDiceOwner()
-        if (index >= diceOwner.data.dicenum) { return }
+        if (index >= Int32(diceOwner.diceResults.size)) { return }
         match (engine.phase) {
             case GamePhase.PLAYER_ATTACK =>
                 diceOwner.cycleDiceMode(index)
@@ -520,7 +677,7 @@ public class CardGameUI {
                     return
                 }
                 engine.playerAttack()
-                if (engine.gameMode == GameMode.VS_AI && engine.phase == GamePhase.AI_TURN) {
+                if (engine.gameMode == GameMode.VS_AI && engine.phase == GamePhase.AI_TURN && engine.ai.hp > 0) {
                     engine.aiAttack()
                 }
                 refreshUI()
@@ -567,7 +724,7 @@ public class CardGameUI {
         let bottom = engine.activeDiceOwner()
         let top = engine.topChar()
         aiHpBar.setValue(Float32(top.hp))
-        aiHpLabel.setText("${top.hp}/${top.data.maxHP}")
+        aiHpLabel.setText("${top.hp}/${top.effMaxHP()}")
         playerHpBar.setValue(Float32(bottom.hp))
         playerHpLabel.setText("${bottom.hp}/${bottom.data.maxHP}")
     }
@@ -576,14 +733,16 @@ public class CardGameUI {
         let bottom = engine.activeDiceOwner()
         let top = engine.topChar()
         aiSpBar.setValue(Float32(top.skillPoints))
-        aiSpLabel.setText("SP:${top.skillPoints}/${top.data.activeSkillCost}")
-        let topFull = top.skillPoints >= top.data.activeSkillCost
+        let topCost = top.effectiveSkillCost()
+        aiSpLabel.setText("SP:${top.skillPoints}/${topCost}")
+        let topFull = top.skillPoints >= topCost
         aiSpBar.setStyle(if (topFull) { spFullStyle } else { spNormStyle })
         aiSkillNameLabel.setText(if (topFull) { getSkillName(top.data.id) } else { "" })
 
         playerSpBar.setValue(Float32(bottom.skillPoints))
-        playerSpLabel.setText("SP:${bottom.skillPoints}/${bottom.data.activeSkillCost}")
-        let plFull = bottom.skillPoints >= bottom.data.activeSkillCost
+        let plCost = bottom.effectiveSkillCost()
+        playerSpLabel.setText("SP:${bottom.skillPoints}/${plCost}")
+        let plFull = bottom.skillPoints >= plCost
         playerSpBar.setStyle(if (plFull) { spFullStyle } else { spNormStyle })
     }
 
@@ -606,7 +765,7 @@ public class CardGameUI {
     }
 
     private func refreshSkillButton(): Unit {
-        let plFull = engine.player.skillPoints >= engine.player.data.activeSkillCost
+        let plFull = engine.player.skillPoints >= engine.player.effectiveSkillCost()
         if (plFull) {
             let name = getSkillName(engine.player.data.id)
             let stacks = engine.playerSkillStacks
@@ -635,11 +794,11 @@ public class CardGameUI {
                 bottomName = if (isP1Att) { "玩家1" } else { "玩家2" }
                 topName = if (isP1Att) { "玩家2" } else { "玩家1" }
             }
-            playerNameLabel.setText("${bottomName}: ${bottom.data.name} (物防${bottom.data.physicalDefense} 法防${bottom.data.magicalDefense})")
-            aiNameLabel.setText("${topName}: ${top.data.name} (物防${top.data.physicalDefense} 法防${top.data.magicalDefense})")
+            playerNameLabel.setText("${bottomName}: ${bottom.data.name}[${bottom.race.name}] (物防${bottom.data.physicalDefense} 法防${bottom.data.magicalDefense})")
+            aiNameLabel.setText("${topName}: ${top.data.name}[${top.race.name}] (物防${top.data.physicalDefense} 法防${top.data.magicalDefense})")
         } else {
-            aiNameLabel.setText("AI: ${top.data.name} (物防${top.data.physicalDefense} 法防${top.data.magicalDefense})")
-            playerNameLabel.setText("你: ${bottom.data.name} (物防${bottom.data.physicalDefense} 法防${bottom.data.magicalDefense})")
+            aiNameLabel.setText("AI: ${top.data.name}[${top.race.name}] (物防${top.data.physicalDefense} 法防${top.data.magicalDefense})")
+            playerNameLabel.setText("你: ${bottom.data.name}[${bottom.race.name}] (物防${bottom.data.physicalDefense} 法防${bottom.data.magicalDefense})")
         }
     }
 
@@ -657,7 +816,7 @@ public class CardGameUI {
             case _ => false
         }
         let diceOwner = engine.activeDiceOwner()
-        let totalDice = diceOwner.data.dicenum
+        let totalDice = Int32(diceOwner.diceResults.size)
         let diceSize: Float32 = Float32(42)
         let diceSpacing: Float32 = Float32(6)
         let totalW = Float32(totalDice) * diceSize + Float32(totalDice - 1) * diceSpacing
@@ -751,5 +910,23 @@ public class CardGameUI {
         window.show()
         let result = window.run()
         Int32(result)
+    }
+}
+
+func getClassDetail(cd: CharData): String {
+    match (cd.id) {
+        case 1 => "【剑士】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【剑气斩】SP${cd.activeSkillCost}\n物攻法攻 +50%/层，可叠加\n\n被动技【剑气暴击】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case 2 => "【盾卫】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【坚盾】SP${cd.activeSkillCost}\n受到伤害-40%，反弹20%伤害\n\n被动技【铁壁】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case 3 => "【暗影】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【暗杀】SP${cd.activeSkillCost}\n攻击 +30%/层，可叠加\n\n被动技【致命一击】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case 4 => "【术士】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【奥术爆发】SP${cd.activeSkillCost}\n法攻 +60%/层，穿透+30%/层\n\n被动技【奥术暴击】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case 5 => "【狂战】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【狂暴】SP${cd.activeSkillCost}\n攻击 +70%/层，但受到伤害+30%\n\n被动技【狂怒暴击】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case 6 => "【圣骑】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【圣光审判】SP${cd.activeSkillCost}\n攻击 +25%/层，回复20%HP/层\n\n被动技【圣光暴击】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case 7 => "【元素使】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【元素过载】SP${cd.activeSkillCost}\n法攻 +100%/层，无视防御骰！\n\n被动技【元素暴击】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case 8 => "【死灵】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【灵魂收割】SP${cd.activeSkillCost}\n攻击 +20%/层，吸血40%，削弱敌方25%\n\n被动技【死灵暴击】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case 9 => "【魔剑士】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【魔剑共鸣】SP${cd.activeSkillCost}\n物攻法攻 +45%/层，可叠加\n\n被动技【魔剑暴击】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case 10 => "【武僧】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【连击】SP${cd.activeSkillCost}\n攻击 +50%/层，回复15%HP/层\n\n被动技【连击暴击】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case 11 => "【咒术师】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【恶咒】SP${cd.activeSkillCost}\n法攻 +40%/层，穿透+15%/层，削弱敌方25%\n\n被动技【咒术暴击】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case 12 => "【龙骑士】HP${cd.maxHP}  物x${cd.physicalAttackMul} 法x${cd.magicalAttackMul}  物防${cd.physicalDefense} 法防${cd.magicalDefense}\n骰子${cd.dicenum}个  攻击选${cd.ATKnum}个  防御选${cd.DMGnum}个\n\n主动技【龙击】SP${cd.activeSkillCost}\n物攻 +80%/层，穿透+40%/层\n\n被动技【龙骑暴击】阈值${cd.passiveSkillThreshold}\n暴击 x4 伤害"
+        case _ => ""
     }
 }

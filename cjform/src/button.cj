@@ -13,6 +13,8 @@ public class Button <: Widget {
     private var isHovered: Bool
     private var isPressed: Bool
     private var _onClick: () -> Unit
+    private var _onRightClick: Option<() -> Unit>
+    private var rightPressed: Bool
     private var layoutFrame: Option<LayoutFrame>
     private var hoverAnim: AnimationState
     private var pressAnim: AnimationState
@@ -30,6 +32,8 @@ public class Button <: Widget {
         this.isHovered = false
         this.isPressed = false
         this._onClick = onClick
+        this._onRightClick = None
+        this.rightPressed = false
         this.layoutFrame = None
         this.hoverAnim = AnimationState()
         this.pressAnim = AnimationState()
@@ -223,15 +227,28 @@ public class Button <: Widget {
             case EventType.MouseLeave =>
                 isHovered = false
                 isPressed = false
+                rightPressed = false
                 hoverAnim.start(1.0, 0.0, 120, Easing.EaseOut)
                 pressAnim.start(1.0, 0.0, 80, Easing.EaseOut)
                 true
             case EventType.MouseDown =>
-                isPressed = true
+                match (event.mouseEvent) {
+                    case Some(me) =>
+                        if (me.button == 2) { rightPressed = true }
+                        else { isPressed = true }
+                    case None => isPressed = true
+                }
                 pressAnim.start(0.0, 1.0, 60, Easing.EaseOut)
                 true
             case EventType.MouseUp =>
-                if (isPressed) {
+                if (rightPressed) {
+                    rightPressed = false
+                    pressAnim.start(1.0, 0.0, 80, Easing.EaseOut)
+                    match (_onRightClick) {
+                        case Some(cb) => cb()
+                        case None => _onClick()
+                    }
+                } else if (isPressed) {
                     isPressed = false
                     pressAnim.start(1.0, 0.0, 80, Easing.EaseOut)
                     _onClick()
@@ -250,6 +267,7 @@ public class Button <: Widget {
     }
 
     public func onClick(cb: () -> Unit): Button { this._onClick = cb; this }
+    public func onRightClick(cb: () -> Unit): Button { this._onRightClick = Some(cb); this }
     public func setText(text: String): Unit {
         this.text = text
     }
