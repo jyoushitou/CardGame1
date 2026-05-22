@@ -287,7 +287,7 @@ public class CardGameUI {
             "Microsoft YaHei", Float32(14), SizeScale.fixed(), Anchor.TopLeft)
         window.addWidget(aiNameLabel)
 
-        aiHpBar = ProgressBar(Float32(0), Float32(100), Float32(100), ProgressBarStyle.fromTheme())
+        aiHpBar = ProgressBar(Float32(0), Float32(150), Float32(100), ProgressBarStyle.fromTheme())
         aiHpBar.setLayoutFrame(LayoutFrame(MG + X_HPBAR, Y_AI_HPROW, W_HPBAR, Float32(20)))
         window.addWidget(aiHpBar)
 
@@ -379,7 +379,7 @@ public class CardGameUI {
             "Microsoft YaHei", Float32(14), SizeScale.fixed(), Anchor.TopLeft)
         window.addWidget(playerNameLabel)
 
-        playerHpBar = ProgressBar(Float32(0), Float32(100), Float32(100), ProgressBarStyle.fromTheme())
+        playerHpBar = ProgressBar(Float32(0), Float32(150), Float32(100), ProgressBarStyle.fromTheme())
         playerHpBar.setLayoutFrame(LayoutFrame(MG + X_HPBAR, Y_PL_HPROW, W_HPBAR, Float32(20)))
         window.addWidget(playerHpBar)
 
@@ -421,7 +421,14 @@ public class CardGameUI {
         modeBtnLAN.onClick() { showLobbyScreen() }
         lobbyBtnHost.onClick() { onHostRoom() }
         lobbyBtnJoin.onClick() { onJoinRoom() }
-        lobbyBackBtn.onClick() { hideLobbyScreen(); showModeScreen() }
+        lobbyBackBtn.onClick() {
+            lanClient.stopDiscovery()
+            lanClient.disconnect()
+            discovering = false
+            connecting = false
+            hideLobbyScreen()
+            showModeScreen()
+        }
         let classes = getAllClasses()
         var cIdx: Int32 = 0
         for (cd in classes) {
@@ -548,8 +555,13 @@ public class CardGameUI {
     public func pollNetwork(): Unit {
         if (isHost) {
             lanServer.acceptClient()
-            lanServer.pollDiscovery()
+            if (!lanGameStarted) {
+                lanServer.pollDiscovery()
+            }
             let msgs = lanServer.poll()
+            if (!lanServer.hasClient() && lanGameStarted) {
+                engine.log("对手已断开连接")
+            }
             if (msgs.size > 0) {
                 for (msg in msgs) {
                     handleNetMsg(msg)
@@ -558,6 +570,11 @@ public class CardGameUI {
             }
         } else if (lanClient.isConnected()) {
             let msgs = lanClient.poll()
+            if (!lanClient.isConnected()) {
+                engine.log("与主机的连接已断开")
+                refreshMessageLog()
+                window.requestRender()
+            }
             if (msgs.size > 0) {
                 for (msg in msgs) {
                     handleNetMsg(msg)
@@ -726,6 +743,9 @@ public class CardGameUI {
             selectInfoLabel.setText("等待房主选择职业和种族...")
             selectInfoLabel.setPosition(Position.abs(WIN_W / Float32(2), Float32(200)))
         }
+        if (isHost) {
+            lanServer.stopDiscovery()
+        }
         lanGameStarted = true
     }
 
@@ -750,6 +770,14 @@ public class CardGameUI {
         b.addInt("gm", 1)
         b.addInt("turn", engine.halfTurnCount)
         b.addInt("skstk", engine.playerSkillStacks)
+        b.addInt("pl_rv", if (engine.player.revived) { 1 } else { 0 })
+        b.addInt("ai_rv", if (engine.ai.revived) { 1 } else { 0 })
+        b.addInt("pl_dv", Int32(engine.player.damageVuln * Float32(1000)))
+        b.addInt("ai_dv", Int32(engine.ai.damageVuln * Float32(1000)))
+        b.addInt("pl_dc", Int32(engine.player.damageCounter * Float32(1000)))
+        b.addInt("ai_dc", Int32(engine.ai.damageCounter * Float32(1000)))
+        b.addInt("pl_db", Int32(engine.player.demonBuff * Float32(1000)))
+        b.addInt("ai_db", Int32(engine.ai.demonBuff * Float32(1000)))
         if (!skipDice) {
             let diceOwner = engine.activeDiceOwner()
             b.add("dice", encodeIntArray(diceOwner.diceResults))
@@ -810,6 +838,14 @@ public class CardGameUI {
         engine.ai.bonusDice = msg.getInt("ai_bd")
         engine.halfTurnCount = msg.getInt("turn")
         engine.playerSkillStacks = msg.getInt("skstk")
+        engine.player.revived = msg.getInt("pl_rv") != 0
+        engine.ai.revived = msg.getInt("ai_rv") != 0
+        engine.player.damageVuln = Float32(msg.getInt("pl_dv")) / Float32(1000)
+        engine.ai.damageVuln = Float32(msg.getInt("ai_dv")) / Float32(1000)
+        engine.player.damageCounter = Float32(msg.getInt("pl_dc")) / Float32(1000)
+        engine.ai.damageCounter = Float32(msg.getInt("ai_dc")) / Float32(1000)
+        engine.player.demonBuff = Float32(msg.getInt("pl_db")) / Float32(1000)
+        engine.ai.demonBuff = Float32(msg.getInt("ai_db")) / Float32(1000)
         //Update dice for active player
         let diceVals = decodeIntArray(msg.get("dice"))
         let physAssign = decodeBoolArray(msg.get("physd"))
@@ -1203,6 +1239,9 @@ public class CardGameUI {
                         pos = pos + 1
                     }
                     sendToNetStr(MsgBuilder(DICE_ASSIGN).add("phys", encodeIntArray(physIdx)).add("mag", encodeIntArray(magIdx)).build())
+                case ROUND_RESULT | GAME_OVER =>
+                    engine.log("请等待房主操作")
+                    refreshMessageLog()
                 case _ => ()
             }
             return
@@ -1246,6 +1285,15 @@ public class CardGameUI {
                 if (isHost && lanGameStarted) { sendStateSync(false) }
 
             case GamePhase.GAME_OVER =>
+                if (lanGameStarted) {
+                    if (isHost) {
+                        lanServer.stop()
+                    } else {
+                        lanClient.disconnect()
+                    }
+                    lanGameStarted = false
+                    isHost = false
+                }
                 engine = CardGameEngine()
                 showModeScreen()
 
@@ -1274,7 +1322,7 @@ public class CardGameUI {
         aiHpBar.setValue(Float32(top.hp))
         aiHpLabel.setText("${top.hp}/${top.effMaxHP()}")
         playerHpBar.setValue(Float32(bottom.hp))
-        playerHpLabel.setText("${bottom.hp}/${bottom.data.maxHP}")
+        playerHpLabel.setText("${bottom.hp}/${bottom.effMaxHP()}")
     }
 
     private func refreshSkillBars(): Unit {

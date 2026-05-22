@@ -255,6 +255,22 @@ __declspec(dllexport) void bridge_net_udp_close(int64_t handle) {
     }
 }
 
+// --- Connection health ---
+
+__declspec(dllexport) bool bridge_net_is_alive(int64_t handle) {
+    SOCKET s = (SOCKET)handle;
+    if (s == INVALID_SOCKET) return false;
+    char buf;
+    int r = recv(s, &buf, 1, MSG_PEEK);
+    if (r == 0) return false;
+    if (r == SOCKET_ERROR) {
+        int err = WSAGetLastError();
+        if (err == WSAEWOULDBLOCK) return true;
+        return false;
+    }
+    return true;
+}
+
 // --- Generic close ---
 
 __declspec(dllexport) void bridge_net_close(int64_t handle) {

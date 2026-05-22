@@ -124,6 +124,11 @@ public class NetClient {
     public func poll(): ArrayList<NetMsg> {
         let msgs = ArrayList<NetMsg>()
         if (handle < Int64(0)) { return msgs }
+        if (!netIsAlive(handle)) {
+            connected = false
+            handle = Int64(-1)
+            return msgs
+        }
         let data = netRecv(handle)
         if (data.size > 0) {
             let lines = reader.feed(data)

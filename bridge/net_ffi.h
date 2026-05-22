@@ -31,6 +31,7 @@ __declspec(dllexport) void bridge_net_udp_close(int64_t handle);
 
 // Utility
 __declspec(dllexport) void bridge_net_close(int64_t handle);
+__declspec(dllexport) bool bridge_net_is_alive(int64_t handle);
 __declspec(dllexport) int bridge_net_last_error();
 
 }

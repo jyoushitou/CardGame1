@@ -37,6 +37,10 @@ public class NetServer {
     public func poll(): ArrayList<NetMsg> {
         let msgs = ArrayList<NetMsg>()
         if (clientHandle < Int64(0)) { return msgs }
+        if (!netIsAlive(clientHandle)) {
+            clientHandle = Int64(-1)
+            return msgs
+        }
         let data = netRecv(clientHandle)
         if (data.size > 0) {
             let lines = reader.feed(data)

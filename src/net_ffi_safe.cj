@@ -16,6 +16,7 @@ foreign func bridge_net_udp_send(handle: Int64, host: CString, port: Int32, data
 foreign func bridge_net_udp_recv(handle: Int64, buffer: CPointer<Byte>, bufferSize: Int32, fromHost: CPointer<Byte>, fromPort: CPointer<Int32>): Int32
 foreign func bridge_net_udp_close(handle: Int64): Unit
 foreign func bridge_net_close(handle: Int64): Unit
+foreign func bridge_net_is_alive(handle: Int64): Bool
 
 public func netInit(): Bool {
     let result = unsafe { bridge_net_init() }
@@ -104,4 +105,8 @@ public func netUdpClose(handle: Int64): Unit {
 
 public func netClose(handle: Int64): Unit {
     unsafe { bridge_net_close(handle) }
+}
+
+public func netIsAlive(handle: Int64): Bool {
+    unsafe { bridge_net_is_alive(handle) }
 }
