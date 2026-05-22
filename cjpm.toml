@@ -7,7 +7,7 @@
   output-type = "executable"
   compile-option = "-Woff unused"
   override-compile-option = ""
-  link-option = "-L. -lbridge --subsystem console"
+  link-option = "-L. -lbridge --subsystem windows"
   package-configuration = {}
   homepage = "https://github.com/Sunse666/cjform"
   license = "GPL-3.0"
