@@ -58,6 +58,10 @@ public class ProgressBar <: Widget {
         currentValue = if (value < minValue) { minValue } else if (value > maxValue) { maxValue } else { value }
     }
 
+    public func setStyle(style: ProgressBarStyle): Unit {
+        this.style = style
+    }
+
     public func setIndeterminate(indeterminate: Bool): Unit {
         isIndeterminate = indeterminate
         if (indeterminate) {

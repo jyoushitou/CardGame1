@@ -179,7 +179,11 @@ public class Label <: Widget {
     }
 
     public func getLayoutMinHeight(): Float32 {
-        baseFontSize * 1.2
+        var lines: Int32 = 1
+        for (c in text) {
+            if (c == UInt8(10)) { lines = lines + 1 }
+        }
+        Float32(lines) * baseFontSize * Float32(1.4)
     }
 
     public func setLayoutFrame(frame: LayoutFrame): Unit {

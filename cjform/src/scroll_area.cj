@@ -255,7 +255,7 @@ public class ScrollArea <: Widget {
             showBarX = needBarX
         }
         if (!needBarY) { showBarY = false }
-        if (!needBarX) { showBarX = false }
+        showBarX = false
         let vpW = if (showBarY) { viewportW - prefBarThick } else { viewportW }
         let vpH = if (showBarX) { viewportH - prefBarThick } else { viewportH }
         maxScrollX = if (contentViewW > vpW) { contentViewW - vpW } else { 0.0 }
