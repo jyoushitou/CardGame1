@@ -17,6 +17,9 @@ foreign func bridge_net_udp_recv(handle: Int64, buffer: CPointer<Byte>, bufferSi
 foreign func bridge_net_udp_close(handle: Int64): Unit
 foreign func bridge_net_close(handle: Int64): Unit
 foreign func bridge_net_is_alive(handle: Int64): Bool
+foreign func bridge_net_get_local_ip(buffer: CPointer<Byte>, bufferSize: Int32): Int32
+foreign func bridge_net_get_public_ip(buffer: CPointer<Byte>, bufferSize: Int32): Int32
+foreign func bridge_upnp_add_mapping(port: Int32, protocol: CString, description: CString): Int32
 
 public func netInit(): Bool {
     let result = unsafe { bridge_net_init() }
@@ -109,4 +112,38 @@ public func netClose(handle: Int64): Unit {
 
 public func netIsAlive(handle: Int64): Bool {
     unsafe { bridge_net_is_alive(handle) }
+}
+
+public func netGetLocalIp(): String {
+    let buffer = unsafe { LibC.malloc<Byte>(count: 64) }
+    let len = unsafe { bridge_net_get_local_ip(buffer, 64) }
+    if (len > 0) {
+        let result = unsafe { CString(buffer) }.toString()
+        unsafe { LibC.free(buffer) }
+        result
+    } else {
+        unsafe { LibC.free(buffer) }
+        ""
+    }
+}
+
+public func netGetPublicIp(): String {
+    let buffer = unsafe { LibC.malloc<Byte>(count: 64) }
+    let len = unsafe { bridge_net_get_public_ip(buffer, 64) }
+    if (len > 0) {
+        let result = unsafe { CString(buffer) }.toString()
+        unsafe { LibC.free(buffer) }
+        result
+    } else {
+        unsafe { LibC.free(buffer) }
+        ""
+    }
+}
+
+public func upnpAddMapping(port: Int32, protocol: String, desc: String): Bool {
+    let pc = unsafe { LibC.mallocCString(protocol) }
+    let dc = unsafe { LibC.mallocCString(desc) }
+    let result = unsafe { bridge_upnp_add_mapping(port, pc, dc) }
+    unsafe { LibC.free(pc); LibC.free(dc) }
+    result != 0
 }

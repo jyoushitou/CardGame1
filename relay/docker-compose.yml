@@ -1,0 +1,7 @@
+services:
+  relay:
+    build: .
+    container_name: cjform-relay
+    ports:
+      - "9528:9528"
+    restart: unless-stopped

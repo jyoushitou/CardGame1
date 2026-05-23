@@ -31,8 +31,6 @@ public class NetClient {
         this.foundHosts = ArrayList<String>()
     }
 
-    // --- Discovery (non-blocking, call per frame) ---
-
     public func startDiscovery(port: Int32): Unit {
         discoveryHandle = netUdpCreate(0)
         if (discoveryHandle < Int64(0)) {
@@ -89,8 +87,6 @@ public class NetClient {
 
     public func isDiscovering(): Bool { discovering }
 
-    // --- Connection (non-blocking, call per frame) ---
-
     public func startConnect(host: String, port: Int32): Unit {
         handle = netClientConnect(host, port)
         if (handle < Int64(0)) {
@@ -119,7 +115,23 @@ public class NetClient {
 
     public func isConnecting(): Bool { connecting }
 
-    // --- TCP messaging ---
+    public func pollRaw(): ArrayList<String> {
+        let lines = ArrayList<String>()
+        if (handle < Int64(0)) { return lines }
+        if (!netIsAlive(handle)) {
+            connected = false
+            handle = Int64(-1)
+            return lines
+        }
+        let data = netRecv(handle)
+        if (data.size > 0) {
+            let rawLines = reader.feed(data)
+            for (line in rawLines) {
+                lines.add(line)
+            }
+        }
+        lines
+    }
 
     public func poll(): ArrayList<NetMsg> {
         let msgs = ArrayList<NetMsg>()
@@ -149,6 +161,13 @@ public class NetClient {
         if (handle < Int64(0)) { return }
         netSend(handle, wire + "\n")
     }
+
+    public func sendRaw(data: String): Unit {
+        if (handle < Int64(0)) { return }
+        netSend(handle, data)
+    }
+
+    public func getHandle(): Int64 { handle }
 
     public func disconnect(): Unit {
         if (handle >= Int64(0)) { netClose(handle) }

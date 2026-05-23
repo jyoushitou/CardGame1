@@ -207,7 +207,7 @@ __declspec(dllexport) int bridge_process_message() {
         DispatchMessageW(&msg);
         return 1;
     }
-    Sleep(1);  // Yield CPU when idle, keeps poll rate high
+    Sleep(1);
     return 1;
 }
 

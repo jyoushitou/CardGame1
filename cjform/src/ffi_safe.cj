@@ -1,12 +1,5 @@
 package cjform
 
-// ============================================================
-// Safe FFI wrappers — all CString allocation/free lives here.
-// Widget code calls these instead of unsafe bridge_* directly.
-// ============================================================
-
-// --- Config (INI) ---
-
 public func ffi_configWrite(section: String, key: String, value: String): Unit {
     let sc = unsafe { LibC.mallocCString(section) }
     let kc = unsafe { LibC.mallocCString(key) }
@@ -30,7 +23,16 @@ public func ffi_configReadInt(section: String, key: String, defaultVal: Int32): 
     r
 }
 
-// --- Clipboard ---
+public func ffi_configReadString(section: String, key: String, defaultVal: String): String {
+    let sc = unsafe { LibC.mallocCString(section) }
+    let kc = unsafe { LibC.mallocCString(key) }
+    let dc = unsafe { LibC.mallocCString(defaultVal) }
+    let buffer = unsafe { LibC.malloc<Byte>(count: 256) }
+    let len = unsafe { bridge_config_read_string(sc, kc, dc, buffer, 256) }
+    let result = if (len > 0) { unsafe { CString(buffer) }.toString() } else { defaultVal }
+    unsafe { LibC.free(sc); LibC.free(kc); LibC.free(dc); LibC.free(buffer) }
+    result
+}
 
 public func ffi_clipboardSetText(text: String): Unit {
     let cstr = unsafe { LibC.mallocCString(text) }
@@ -45,8 +47,6 @@ public func ffi_clipboardGetText(): String {
     unsafe { LibC.free(buffer) }
     result
 }
-
-// --- Native Edit ---
 
 public func ffi_editCreate(parent: CPointer<Byte>, x: Int32, y: Int32, w: Int32, h: Int32, placeholder: String): CPointer<Byte> {
     let cstr = unsafe { LibC.mallocCString(placeholder) }
@@ -72,8 +72,6 @@ public func ffi_editGetText(hEdit: CPointer<Byte>): String {
     result
 }
 
-// --- Image ---
-
 public func ffi_loadImage(filePath: String): CPointer<Byte> {
     let cstr = unsafe { LibC.mallocCString(filePath) }
     let bmp = unsafe { bridge_gdip_load_image(cstr) }
@@ -98,8 +96,6 @@ public func ffi_drawImage(hwnd: CPointer<Byte>, img: CPointer<Byte>, x: Float32,
     unsafe { bridge_gdip_draw_image(hwnd, img, x, y, w, h) }
 }
 
-// --- File Dialogs ---
-
 public func ffi_showOpenDialog(hwnd: CPointer<Byte>, title: String, filter: String, multiSelect: Bool): Option<String> {
     let tc = unsafe { LibC.mallocCString(title) }
     let fc = unsafe { LibC.mallocCString(filter) }
@@ -121,8 +117,6 @@ public func ffi_showSaveDialog(hwnd: CPointer<Byte>, title: String, filter: Stri
     if (path.size == 0) { None<String> } else { Some(path) }
 }
 
-// --- Window ---
-
 public func ffi_windowCreate(title: String, width: Int32, height: Int32, resizable: Bool, alwaysOnTop: Bool, noTitleBar: Bool): CPointer<Byte> {
     let tc = unsafe { LibC.mallocCString(title) }
     let hwnd = unsafe { bridge_window_create(tc, width, height, resizable, alwaysOnTop, noTitleBar) }
@@ -132,8 +126,6 @@ public func ffi_windowCreate(title: String, width: Int32, height: Int32, resizab
     }
     hwnd
 }
-
-// --- Misc ---
 
 public func ffi_getTickCount(): Int64 {
     unsafe { bridge_get_tick_count() }
@@ -163,19 +155,13 @@ public func ffi_measureTextRange(hwnd: CPointer<Byte>, text: String, charCount: 
     w
 }
 
-// --- Pointer utilities ---
-
 public func ffi_isNullPtr(ptr: CPointer<Byte>): Bool {
     unsafe { bridge_is_null_ptr(ptr) }
 }
 
-// --- Render ---
-
 public func ffi_requestRender(hwnd: CPointer<Byte>): Unit {
     unsafe { bridge_window_request_render(hwnd) }
 }
-
-// --- GDI+ ---
 
 public func ffi_getDpiScale(hwnd: CPointer<Byte>): Float32 {
     let scale = unsafe { bridge_get_dpi_scale(hwnd) }

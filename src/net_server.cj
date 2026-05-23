@@ -73,12 +73,10 @@ public class NetServer {
     public func isActive(): Bool { active }
     public func hasClient(): Bool { clientHandle >= Int64(0) }
 
-    // Start UDP discovery responder (continuous)
     public func startDiscovery(port: Int32): Unit {
         udpHandle = netUdpCreate(port)
     }
 
-    // Poll for DISCOVER and reply ANNOUNCE (call each frame)
     public func pollDiscovery(): Unit {
         if (udpHandle < Int64(0)) { return }
         while (true) {

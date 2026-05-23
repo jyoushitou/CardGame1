@@ -47,14 +47,12 @@ typedef struct {
     int  dropFileCount;
 } WindowContext;
 
-// --- utility functions (internal linkage) ---
 wchar_t* utf8_to_utf16(const char* utf8_str);
 char* utf16_to_utf8(const wchar_t* wstr);
 void applyClipIfNeeded(Graphics* g, WindowContext* ctx);
 void setupHighQualityGraphics(Graphics* graphics);
 wchar_t* build_filter(const char* filter);
 
-// --- exported bridge functions ---
 __declspec(dllexport) void* bridge_gdip_init();
 __declspec(dllexport) void bridge_gdip_cleanup();
 

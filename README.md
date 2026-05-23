@@ -4,7 +4,7 @@
 
 ## 运行
 
-```
+```bash
 cjpm build
 target\release\bin\CardGame.exe
 ```
@@ -15,7 +15,10 @@ target\release\bin\CardGame.exe
 |------|------|
 | 单人 vs AI | 与 AI 对战 |
 | 双人对战 | 同屏热座，两人交替操作 |
-| 局域网联机 | 两人通过局域网/虚拟局域网对战 |
+| 局域网联机 | UDP 自动发现，同一局域网/虚拟局域网对战 |
+| 远程联机 | 通过中继服务器跨网络对战，无需公网 IP |
+
+---
 
 ## 玩法
 
@@ -45,7 +48,7 @@ target\release\bin\CardGame.exe
 
 ### SP 与技能
 
-- 每次攻击/防御后获得 SP（`9 × √原始伤害 × 种族SP倍率`，攻方上限 120，守方上限 60）
+- 每次攻击/防御后获得 SP
 - SP 满后可释放主动技能，可叠加多层
 - 每个职业有独特的主动技能和被动暴击（暴击 x4）
 
@@ -75,8 +78,6 @@ target\release\bin\CardGame.exe
 
 ## 种族
 
-职业选定后选择种族，种族提供**每回合成长**和**强力机制**：
-
 | 种族 | 每回合成长 | 核心机制 |
 |------|-----------|---------|
 | 龙裔 | +4% 攻击（叠 10 层） | ≥5 层暴击触发龙威：伤害翻倍 |
@@ -86,20 +87,127 @@ target\release\bin\CardGame.exe
 | 天人 | +2% 全属性/层（叠 10 层） | SP 满时技能消耗减半 |
 | 虚空族 | +2% 穿透/层（叠 10 层） | 攻击偷取敌方最高骰子 |
 
+---
+
+## 远程联机（中继服务器）
+
+远程联机用于跨网络对战——双方无需公网 IP、无需端口转发、无需虚拟组网工具，通过一台中继服务器转发数据。
+
+### 架构
+
+```
+房主 ──→ 中继服务器 :9528 ←── 对手
+              │
+      同房间码配对，双向转发
+```
+
+### 搭建中继服务器
+
+中继服务端是一个独立的 Python 程序，约 120 行，部署在你的云服务器上。
+
+**环境要求：**
+
+- 任意 Linux 服务器
+- Python 3.10+ 或 Docker
+- 防火墙/安全组放行 TCP 9528
+
+**方式一：Docker（推荐）**
+
+```bash
+# 1. 将 relay 文件夹上传到服务器
+scp -r relay/* root@你的服务器IP:~/relay/
+
+# 2. SSH 进入服务器
+ssh root@你的服务器IP
+
+# 3. 启动
+cd ~/relay
+docker compose up -d
+
+# 4. 确认运行
+docker logs cjform-relay
+# 看到 "Relay server listening on ('0.0.0.0', 9528)" 即成功
+```
+
+**方式二：直接运行**
+
+```bash
+cd ~/relay
+python3 relay_server.py          # 默认端口 9528
+python3 relay_server.py 12345    # 自定义端口
+```
+
+**安全组设置：**
+
+如果用阿里云/腾讯云等，在云控制台安全组添加入站规则：
+```
+协议: TCP    端口: 9528    来源: 0.0.0.0/0
+```
+
+### 配置客户端
+
+编辑游戏目录下的 `cjform.ini`，在 `[relay]` 段填写中继服务器地址：
+
+```ini
+[relay]
+host=relay.example.com
+port=9528
+```
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `host` | 中继服务器域名或 IP | 空（使用 127.0.0.1） |
+| `port` | 中继服务器端口 | 9528 |
+
+如果不填 `host`，远程联机功能默认连 `127.0.0.1`，仅用于本机双开测试。
+
+### 使用流程
+
+1. 房主：远程联机 → 创建房间 → 屏幕显示 6 位房间码
+2. 对手：远程联机 → 输入房间码 → 通过邀请码连接
+3. 配对成功后自动进入选人 → 开始对战
+
+---
+
+## 配置文件 cjform.ini
+
+游戏运行时自动读取同目录下的 `cjform.ini`：
+
+```ini
+[window]
+x=0          ; 窗口 X 位置（0 为默认）
+y=0          ; 窗口 Y 位置
+w=0          ; 窗口宽度（0 为默认 800）
+h=0          ; 窗口高度（0 为默认 640）
+
+[relay]
+host=        ; 中继服务器域名或 IP（留空仅本机测试）
+port=9528    ; 中继服务器端口
+```
+
+如果文件不存在，游戏会使用默认值正常运行。
+
+---
+
 ## 局域网联机
 
-1. 双方连入同一局域网（或使用虚拟局域网工具如小蓝盾）
+1. 双方连入同一局域网（或使用虚拟组网工具）
 2. 房主：局域网联机 → 创建房间
-3. 客机：局域网联机 → 加入房间（自动发现或 fallback 127.0.0.1）
+3. 客机：局域网联机 → 加入房间（UDP 自动发现）
 4. 房主先选职业种族 → 客机选 → 开始对战
-5. 各自操作自己的回合，对手回合显示"等待对手..."
 
-**分发到其他电脑**需要附带：
+---
+
+## 分发
+
+发给其他人玩需要打包以下文件：
+
 ```
 CardGame.exe
 bridge.dll
-libboundscheck.dll      （来自 Cangjie SDK runtime）
-libcangjie-runtime.dll  （来自 Cangjie SDK runtime）
+cjform.ini                  # 已配置好中继地址
+libboundscheck.dll          # Cangjie SDK runtime
+libcangjie-runtime.dll      # Cangjie SDK runtime
 ```
 
 ## 技术栈
@@ -107,4 +215,5 @@ libcangjie-runtime.dll  （来自 Cangjie SDK runtime）
 - 语言：仓颉 (Cangjie) v1.0.5
 - UI：CjForm（自研 GUI 库，GDI+ 渲染）
 - 网络：WinSock2 FFI（bridge.dll 桥接）
+- 中继：Python asyncio
 - 构建：cjpm + CMake

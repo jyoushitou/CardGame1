@@ -362,3 +362,78 @@ public func decodeBoolArray(s: String): ArrayList<Bool> {
     }
     result
 }
+
+let B62: String = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+func b62val(ch: String): Int64 {
+    let idx = indexOf(B62, ch)
+    if (idx < 0) { Int64(-1) } else { Int64(idx) }
+}
+
+public func encodeInviteCode(ip: String, port: Int32): String {
+    let parts = splitBy(ip, ".")
+    if (parts.size != 4) { return "" }
+    var big: Int64 = Int64(0)
+    for (p in parts) {
+        let v = parseInt(p)
+        if (v < 0 || v > 255) { return "" }
+        big = big * Int64(256) + Int64(v)
+    }
+    big = big * Int64(256) + Int64(port / 256)
+    big = big * Int64(256) + Int64(port % 256)
+
+    if (big <= Int64(0)) { return "" }
+
+    //Encode to base62
+    var code = ""
+    var n: Int64 = big
+    while (n > Int64(0)) {
+        let rem = n % Int64(62)
+        code = charAt(B62, Int32(rem)) + code
+        n = n / Int64(62)
+    }
+    //Pad to at least 8 chars for readability
+    while (Int32(code.size) < 8) {
+        code = "0" + code
+    }
+    code
+}
+
+public func decodeInviteCode(code: String): (String, Int32) {
+    if (code.size < 6) { return ("", 0) }
+
+    //Trim leading zeros (they're padding)
+    var s = code
+    while (Int32(s.size) > 1 && charAt(s, 0) == "0") {
+        s = slice(s, 1, Int32(s.size))
+    }
+
+    //Decode base62 to big integer
+    var big: Int64 = Int64(0)
+    var i: Int32 = 0
+    let len = Int32(s.size)
+    while (i < len) {
+        let v = b62val(charAt(s, i))
+        if (v < Int64(0)) { return ("", 0) }
+        big = big * Int64(62) + v
+        i = i + 1
+    }
+
+    //Extract 6 bytes: 4 IP + 2 port
+    let p2 = Int32(big % Int64(256))
+    big = big / Int64(256)
+    let p1 = Int32(big % Int64(256))
+    big = big / Int64(256)
+    let b4 = Int32(big % Int64(256))
+    big = big / Int64(256)
+    let b3 = Int32(big % Int64(256))
+    big = big / Int64(256)
+    let b2 = Int32(big % Int64(256))
+    big = big / Int64(256)
+    let b1 = Int32(big % Int64(256))
+
+    let ip = "${b1}.${b2}.${b3}.${b4}"
+    let port = p1 * 256 + p2
+    if (port <= 0 || port > 65535) { return ("", 0) }
+    (ip, port)
+}
